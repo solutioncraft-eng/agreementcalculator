@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import type { Role, Tenant } from "@prisma/client";
 import { prisma, tenantDb, type TenantDb } from "@/lib/db";
 import { slugFromHost } from "@/lib/tenant";
+import { trialInfo } from "@/lib/trial";
 
 const COOKIE = "ac_session";
 const MAX_AGE_SECONDS = 60 * 60 * 10; // a working day
@@ -166,10 +167,18 @@ export async function getTenantSession(): Promise<TenantSession | null> {
 /**
  * Sends the caller somewhere sensible when they have no workspace open: the
  * picker if they belong to any, otherwise a dead end explaining as much.
+ *
+ * A workspace whose trial has run out is stopped here rather than in the
+ * layout, so a server action cannot keep working after the pages stop being
+ * served. {@link getTenantSession} stays ungated on purpose — the page that
+ * explains the expiry needs to read the workspace it is talking about.
  */
 export async function requireTenant(): Promise<TenantSession> {
   const session = await getTenantSession();
-  if (session) return session;
+  if (session) {
+    if (trialInfo(session.tenant).expired) redirect("/trial-ended");
+    return session;
+  }
 
   const user = await getCurrentUser();
   if (!user) redirect("/login");

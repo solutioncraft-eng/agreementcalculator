@@ -1,9 +1,15 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
+import { slugFromHost } from "@/lib/tenant";
+import { TRIAL_DAYS } from "@/lib/trial";
 import { LoginForm } from "./login-form";
 
 export default async function LoginPage() {
   if (await getCurrentUser()) redirect("/calculator");
+  // Signing up creates a workspace, so it is offered on the product's own
+  // hostname only — a workspace subdomain already belongs to one.
+  const onWorkspaceHost = Boolean(await slugFromHost());
 
   return (
     <main className="flex min-h-screen">
@@ -28,6 +34,14 @@ export default async function LoginPage() {
           <h2 className="mt-2 text-[30px] leading-9">Agreement Calculator</h2>
           <p className="mt-2 text-slate">Accounts are provisioned by your workspace administrator.</p>
           <LoginForm />
+          {onWorkspaceHost ? null : (
+            <p className="mt-6 border-t border-mist pt-4 text-[13px] text-slate">
+              No workspace yet?{" "}
+              <Link href="/signup" className="font-medium text-orange">
+                Start a {TRIAL_DAYS}-day free trial
+              </Link>
+            </p>
+          )}
         </div>
       </section>
     </main>

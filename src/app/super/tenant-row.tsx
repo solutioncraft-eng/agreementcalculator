@@ -10,6 +10,8 @@ interface Row {
   name: string;
   slug: string;
   status: TenantStatus;
+  /** Where the workspace stands in its trial, or null when it has no deadline. */
+  trial: string | null;
   pricingModel: string;
   pricingModelLabel: string;
   createdAt: string;
@@ -49,6 +51,7 @@ export function TenantRow({ tenant, models }: { tenant: Row; models: PricingMode
           </div>
           <p className="mt-1 font-mono text-[12px] text-slate">
             {tenant.slug} · {tenant.pricingModelLabel} · created {tenant.createdAt}
+            {tenant.trial ? ` · trial ${tenant.trial}` : null}
           </p>
         </div>
 
@@ -77,6 +80,15 @@ export function TenantRow({ tenant, models }: { tenant: Row; models: PricingMode
               Change model
             </button>
           </form>
+          {tenant.status === "TRIAL" ? (
+            <form action={action}>
+              <input type="hidden" name="tenantId" value={tenant.id} />
+              <input type="hidden" name="status" value="ACTIVE" />
+              <button type="submit" className="btn-ghost btn-sm" disabled={pending}>
+                Activate
+              </button>
+            </form>
+          ) : null}
           <form action={action}>
             <input type="hidden" name="tenantId" value={tenant.id} />
             <input type="hidden" name="status" value={suspended ? "ACTIVE" : "SUSPENDED"} />

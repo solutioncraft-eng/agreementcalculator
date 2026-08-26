@@ -1,16 +1,15 @@
 "use server";
 
-import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import type { PricingModel } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { audit } from "@/lib/audit";
-import { hashPassword, requireSuperAdmin } from "@/lib/auth";
+import { requireSuperAdmin } from "@/lib/auth";
 import { sendMail } from "@/lib/email";
+import { provisionWorkspace } from "@/lib/provisioning";
 import { isValidSlug, slugFromName, tenantUrl } from "@/lib/tenant";
-import { PRICING_MODELS, settingsRecord } from "@/lib/pricing/models";
-import { SEED_BUNDLES, SEED_COGS_ITEMS, SEED_COST_BASIS } from "@/lib/pricing/defaults";
+import { PRICING_MODELS } from "@/lib/pricing/models";
 
 export interface SuperState {
   error?: string;
@@ -31,10 +30,10 @@ const createSchema = z.object({
 /**
  * Creates a workspace and invites its first administrator.
  *
- * The workspace starts with a *draft* pricing version so nothing is published
- * — and therefore nothing is quotable — until its own administrator has
- * reviewed the costs. Seeding the reference catalogue is optional: it is a
- * starting point to edit, not a claim about the workspace's own vendors.
+ * An operator-created workspace has no trial deadline — it is set up after a
+ * conversation, not from a signup form — so it stays open until the operator
+ * says otherwise. Seeding the reference catalogue is optional: it is a starting
+ * point to edit, not a claim about the workspace's own vendors.
  */
 export async function createTenant(_prev: SuperState, formData: FormData): Promise<SuperState> {
   const operator = await requireSuperAdmin();
@@ -58,54 +57,15 @@ export async function createTenant(_prev: SuperState, formData: FormData): Promi
     return { error: `The subdomain ${slug} is already taken.` };
   }
 
-  const tenant = await prisma.tenant.create({
-    data: { slug, name: parsed.data.name, pricingModel, status: "TRIAL" },
-  });
-
   const model: PricingModel = pricingModel;
-  await prisma.pricingVersion.create({
-    data: {
-      tenantId: tenant.id,
-      label: `${new Date().getFullYear()}.1`,
-      costBasis: SEED_COST_BASIS,
-      model,
-      settings: settingsRecord(model, PRICING_MODELS[model].defaults),
-      notes: "Starting draft — review the costs, then publish.",
-      createdById: operator.id,
-      cogsItems: seedCatalog
-        ? {
-            create: SEED_COGS_ITEMS.map((item, index) => ({
-              ...item,
-              tenantId: tenant.id,
-              sortOrder: index,
-            })),
-          }
-        : undefined,
-      bundles: {
-        create: SEED_BUNDLES.map((bundle, index) => ({
-          ...bundle,
-          tenantId: tenant.id,
-          sortOrder: index,
-        })),
-      },
-    },
-  });
-
-  const existing = await prisma.user.findUnique({ where: { email: adminEmail } });
-  const password = existing ? null : randomBytes(9).toString("base64url");
-  const account =
-    existing ??
-    (await prisma.user.create({
-      data: {
-        email: adminEmail,
-        name: adminName,
-        passwordHash: await hashPassword(password ?? randomBytes(9).toString("base64url")),
-        mustReset: true,
-      },
-    }));
-
-  await prisma.membership.create({
-    data: { tenantId: tenant.id, userId: account.id, role: "ADMIN" },
+  const { tenant, temporaryPassword } = await provisionWorkspace({
+    name: parsed.data.name,
+    slug,
+    pricingModel: model,
+    seedCatalog,
+    admin: { email: adminEmail, name: adminName },
+    trialEndsAt: null,
+    draftCreatedById: operator.id,
   });
 
   await audit({
@@ -125,7 +85,9 @@ export async function createTenant(_prev: SuperState, formData: FormData): Promi
     lines: [
       `You are the administrator of ${tenant.name}.`,
       `Pricing model: ${PRICING_MODELS[model].label}.`,
-      ...(password ? [`Temporary password: ${password}`, "You will be asked to change it when you sign in."] : []),
+      ...(temporaryPassword
+        ? [`Temporary password: ${temporaryPassword}`, "You will be asked to change it when you sign in."]
+        : []),
       "Start by reviewing your COGS items and publishing your first pricing version — quotes cannot be produced until one is published.",
     ],
     actionLabel: "Sign in",
@@ -136,7 +98,7 @@ export async function createTenant(_prev: SuperState, formData: FormData): Promi
   if (mailed.sent) return { ok: `${tenant.name} created — ${adminEmail} has been invited.` };
   return {
     ok: `${tenant.name} created, but the invitation email to ${adminEmail} failed${mailed.reason === "unconfigured" ? " (email is not configured)" : ""}.`,
-    tempPassword: password ?? undefined,
+    tempPassword: temporaryPassword ?? undefined,
   };
 }
 
