@@ -1,0 +1,287 @@
+// InfinIT MSP Agreement Calculator — data model
+//
+// Design constraint from the business: calculator *results* are not stored.
+// A quote is only persisted when the Account Manager deliberately submits it
+// for leadership review (QuoteRequest); everything else is calculated in the
+// browser and discarded. Audit trail, pricing versions and PDF export stamps
+// are stored permanently.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// DATABASE_URL is the pooled connection used at runtime (Supabase transaction
+// pooler, port 6543). DIRECT_URL bypasses the pooler for DDL — migrations and
+// introspection cannot run through pgbouncer. Locally both point at the same
+// database.
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  ADMIN
+  LEADER
+  AM
+}
+
+enum Unit {
+  USER
+  DEVICE
+  LOCATION
+  FLAT
+}
+
+enum Tier {
+  ADVANTAGE
+  PINNACLE
+}
+
+enum VersionStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum QuoteStatus {
+  PENDING
+  APPROVED
+  CHANGES_REQUESTED
+  DENIED
+  WITHDRAWN
+}
+
+enum ReviewAction {
+  SUBMITTED
+  APPROVED
+  CHANGES_REQUESTED
+  DENIED
+  WITHDRAWN
+  COMMENTED
+  RESUBMITTED
+}
+
+enum ExportDocType {
+  QUOTE
+  COGS
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  role         Role      @default(AM)
+  passwordHash String
+  active       Boolean   @default(true)
+  mustReset    Boolean   @default(false)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  auditEvents      AuditEvent[]
+  quoteRequests    QuoteRequest[]   @relation("submitter")
+  reviews          QuoteReview[]
+  exports          ExportRecord[]
+  publishedVersion PricingVersion[] @relation("publisher")
+  createdVersions  PricingVersion[] @relation("creator")
+}
+
+/// An immutable-once-published snapshot of every number that drives a quote.
+/// Quotes and PDF exports pin the version they were produced with so any
+/// historical document can be reproduced exactly.
+model PricingVersion {
+  id     String        @id @default(cuid())
+  /// Human label, e.g. "2026.3". Unique across versions.
+  label  String        @unique
+  status VersionStatus @default(DRAFT)
+  /// Free-text cost basis shown on documents, e.g. "Q3 2026".
+  costBasis String
+  notes     String?
+
+  // ── Pricing model ────────────────────────────────────────────────
+  /// Labor is imputed as a multiple of tool cost (v11 default 3.10).
+  laborMultiplier   Decimal @db.Decimal(6, 4)
+  /// Default Service Gross Margin, percent (v11 default 50).
+  defaultSgmPct     Decimal @db.Decimal(5, 2)
+  /// Maximum Service Gross Margin the slider allows, percent.
+  maxSgmPct         Decimal @db.Decimal(5, 2)
+  /// Minimum per-user floor in dollars (v11 default 100).
+  minPerUserFloor   Decimal @db.Decimal(10, 2)
+  /// Reduced multiplier applied to low-touch Pinnacle add-on tools (v11 4.83).
+  addonMultiplier   Decimal @db.Decimal(6, 2)
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  publishedAt DateTime?
+
+  createdById   String
+  createdBy     User    @relation("creator", fields: [createdById], references: [id])
+  publishedById String?
+  publishedBy   User?   @relation("publisher", fields: [publishedById], references: [id])
+
+  cogsItems      CogsItem[]
+  bundles        BundleDiscount[]
+  quoteRequests  QuoteRequest[]
+  exports        ExportRecord[]
+}
+
+/// A cost of goods sold line: a tool InfinIT pays for, allocated to a unit
+/// basis (per user / per device / per location / flat per agreement).
+model CogsItem {
+  id        String  @id @default(cuid())
+  versionId String
+  version   PricingVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  /// Stable machine key, unique within a version. Carried across versions so
+  /// a line item's history can be followed.
+  key       String
+  label     String
+  vendor    String?
+  unit      Unit
+  tier      Tier
+  unitCost  Decimal @db.Decimal(10, 4)
+  active    Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  @@unique([versionId, key])
+  @@index([versionId])
+}
+
+model BundleDiscount {
+  id        String  @id @default(cuid())
+  versionId String
+  version   PricingVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  key         String
+  label       String
+  description String?
+  /// Discount as a percentage off the agreement rate.
+  discountPct Decimal @db.Decimal(5, 2)
+  highlight   Boolean @default(false)
+  sortOrder   Int     @default(0)
+
+  @@unique([versionId, key])
+}
+
+/// Only created when a calculation trips an approval threshold and the AM
+/// submits it for review. Holds the inputs and the computed rate so leadership
+/// reviews the same numbers the AM saw.
+model QuoteRequest {
+  id     String      @id @default(cuid())
+  /// Short human reference, e.g. "Q-2026-0041".
+  ref    String      @unique
+  status QuoteStatus @default(PENDING)
+
+  clientName String
+  notes      String?
+
+  // Inputs
+  users     Int
+  devices   Int
+  locations Int
+  sgmPct          Decimal @db.Decimal(5, 2)
+  perUserFloor    Decimal @db.Decimal(10, 2)
+  floorOverride   Boolean @default(false)
+  addonMultiplier Decimal @db.Decimal(6, 2)
+  bundleKey       String
+  requestedTier   Tier
+
+  // Computed rate at submission time (what leadership signs off on)
+  advantageRate        Decimal @db.Decimal(12, 2)
+  advantagePerUser     Decimal @db.Decimal(12, 2)
+  pinnacleRate         Decimal @db.Decimal(12, 2)
+  pinnaclePerUser      Decimal @db.Decimal(12, 2)
+  /// Named approval triggers active at submission, e.g. ["SGM_NON_DEFAULT"].
+  triggers             String[]
+
+  pricingVersionId String
+  pricingVersion   PricingVersion @relation(fields: [pricingVersionId], references: [id])
+
+  submittedById String
+  submittedBy   User   @relation("submitter", fields: [submittedById], references: [id])
+
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  decidedAt  DateTime?
+  /// Retention: quote requests are purged after this date.
+  purgeAfter DateTime
+
+  reviews QuoteReview[]
+  exports ExportRecord[]
+
+  @@index([status])
+  @@index([submittedById])
+}
+
+model QuoteReview {
+  id      String       @id @default(cuid())
+  quoteId String
+  quote   QuoteRequest @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  action    ReviewAction
+  comment   String?
+  actorId   String
+  actor     User         @relation(fields: [actorId], references: [id])
+  createdAt DateTime     @default(now())
+
+  @@index([quoteId])
+}
+
+/// One row per generated PDF. This is what makes "we know exactly how and when
+/// this PDF was created" verifiable: the stamp printed on the document
+/// (exportId + UTC timestamp + pricing version + app version) is looked up here.
+model ExportRecord {
+  id       String        @id @default(cuid())
+  /// Printed on the PDF, e.g. "EXP-8F3K2D".
+  exportId String        @unique
+  docType  ExportDocType
+
+  exportedById String
+  exportedBy   User   @relation(fields: [exportedById], references: [id])
+
+  pricingVersionId String
+  pricingVersion   PricingVersion @relation(fields: [pricingVersionId], references: [id])
+  /// Application version at the time of export.
+  appVersion String
+
+  quoteId String?
+  quote   QuoteRequest? @relation(fields: [quoteId], references: [id])
+
+  clientName String?
+  /// Approval state stamped on the document.
+  approvalState String
+  /// Inputs the document was rendered from — no computed result is stored here
+  /// for unflagged quotes; see docs/DATA_RETENTION.md.
+  inputs Json?
+  /// SHA-256 of the generated PDF bytes.
+  checksum String?
+
+  createdAt DateTime @default(now())
+
+  @@index([exportedById])
+  @@index([createdAt])
+}
+
+model AuditEvent {
+  id      String  @id @default(cuid())
+  action  String
+  /// Entity kind the action applied to, e.g. "CogsItem", "PricingVersion".
+  entity  String?
+  entityId String?
+  summary String
+  before  Json?
+  after   Json?
+
+  actorId String?
+  actor   User?   @relation(fields: [actorId], references: [id])
+  /// Preserved even if the user record is later removed.
+  actorEmail String?
+
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([entity, entityId])
+}

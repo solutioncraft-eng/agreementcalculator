@@ -1,0 +1,105 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-paper text-ink font-sans antialiased;
+    font-size: 15px;
+    line-height: 1.6;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-display text-navy;
+    letter-spacing: -0.015em;
+  }
+}
+
+@layer components {
+  .eyebrow {
+    @apply font-display text-[11px] font-bold uppercase tracking-eyebrow text-orange;
+  }
+
+  .card {
+    @apply rounded-brand border border-mist bg-white p-6;
+  }
+
+  .label {
+    @apply text-[13px] font-medium text-slate;
+  }
+
+  .field {
+    @apply w-full rounded-brand border border-mist bg-white px-3 py-2 text-[15px] text-ink outline-none transition focus:border-navy;
+  }
+
+  .field-alert {
+    @apply border-orange text-orange focus:border-orange;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-brand px-[28px] py-[16px] font-display text-[15px] font-bold leading-none transition disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-sm {
+    @apply px-4 py-[10px] text-[13px];
+  }
+
+  .btn-primary {
+    @apply btn bg-orange text-white hover:bg-orange-dark;
+  }
+
+  .btn-navy {
+    @apply btn bg-navy text-white hover:bg-navy-light;
+  }
+
+  .btn-ghost {
+    @apply btn border border-navy bg-white text-navy hover:bg-mist;
+  }
+
+  .tag {
+    @apply inline-flex items-center rounded-brand px-2 py-[3px] font-display text-[11px] font-bold uppercase tracking-eyebrow;
+  }
+
+  .stat {
+    @apply font-display text-navy tabular-nums;
+  }
+}
+
+/* Range inputs: orange thumb on a mist track, flat per the style guide. */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: #e7eaed;
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #12253a;
+  cursor: pointer;
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: 50%;
+  background: #12253a;
+  cursor: pointer;
+}
+
+input[type="range"].alert::-webkit-slider-thumb {
+  background: #f26b21;
+}
+
+input[type="range"].alert::-moz-range-thumb {
+  background: #f26b21;
+}
