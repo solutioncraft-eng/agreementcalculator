@@ -55,8 +55,8 @@ export function TenantRow({ tenant, models }: { tenant: Row; models: PricingMode
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <form action={modelAction} className="flex items-center gap-2">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+          <form action={modelAction} className="flex flex-wrap items-center gap-2">
             <input type="hidden" name="tenantId" value={tenant.id} />
             <label className="sr-only" htmlFor={`model-${tenant.id}`}>
               Pricing model
@@ -68,7 +68,7 @@ export function TenantRow({ tenant, models }: { tenant: Row; models: PricingMode
               key={tenant.pricingModel}
               name="pricingModel"
               defaultValue={tenant.pricingModel}
-              className="field w-auto py-[10px] text-[13px]"
+              className="field w-full py-[10px] text-[13px] sm:w-auto"
             >
               {models.map((model) => (
                 <option key={model.key} value={model.key}>

@@ -28,11 +28,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="min-h-screen" style={accentStyle(tenant.accentColor)}>
       <header className="border-b border-mist bg-white">
-        <div className="mx-auto flex max-w-content items-center gap-6 px-6 py-3 md:px-10 lg:px-16">
+        {/* Below lg the nav wraps onto its own full-width row and scrolls
+            sideways, so the header never widens the document on a phone. */}
+        <div className="mx-auto flex max-w-content flex-wrap items-center gap-x-6 gap-y-2 px-6 py-3 md:px-10 lg:flex-nowrap lg:px-16">
           <Link href="/calculator" className="shrink-0">
             <TenantLogo logoUrl={tenant.logoUrl} name={tenant.name} />
           </Link>
-          <nav className="flex flex-1 items-center gap-1">
+          <nav className="nav-row order-last flex w-full items-center gap-1 lg:order-none lg:w-auto lg:flex-1 lg:overflow-visible">
             <NavLink href="/calculator">Calculator</NavLink>
             <NavLink href="/quotes" badge={myOpen || undefined}>
               My quotes
@@ -52,7 +54,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             ) : null}
             {user.isSuperAdmin ? <NavLink href="/super">Super-admin</NavLink> : null}
           </nav>
-          <div className="flex items-center gap-4 text-right">
+          <div className="ml-auto flex shrink-0 items-center gap-4 text-right lg:ml-0">
             {memberships.length > 1 ? (
               <WorkspaceSwitcher memberships={memberships} activeTenantId={tenant.id} />
             ) : null}
@@ -60,11 +62,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <p className="text-[13px] font-semibold leading-tight text-navy">{user.name}</p>
               <p className="font-mono text-[11px] uppercase tracking-eyebrow text-slate">{role}</p>
             </div>
-            <Link href="/account/password" className="text-[13px] font-medium text-slate hover:text-orange">
+            <Link
+              href="/account/password"
+              className="whitespace-nowrap py-2 text-[13px] font-medium text-slate hover:text-orange"
+            >
               Password
             </Link>
             <form action={logout}>
-              <button type="submit" className="text-[13px] font-medium text-slate hover:text-orange">
+              <button
+                type="submit"
+                className="whitespace-nowrap py-2 text-[13px] font-medium text-slate hover:text-orange"
+              >
                 Sign out
               </button>
             </form>

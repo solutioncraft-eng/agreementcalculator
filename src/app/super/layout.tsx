@@ -10,7 +10,7 @@ export default async function SuperLayout({ children }: { children: React.ReactN
   return (
     <div className="min-h-screen">
       <header className="border-b border-navy bg-navy text-white">
-        <div className="mx-auto flex max-w-content items-center gap-6 px-6 py-3 md:px-10 lg:px-16">
+        <div className="mx-auto flex max-w-content flex-wrap items-center gap-x-6 gap-y-2 px-6 py-3 md:px-10 lg:px-16">
           <Link
             href="/super"
             className="flex items-center gap-2.5 font-display text-[15px] font-bold uppercase tracking-eyebrow"
@@ -18,13 +18,13 @@ export default async function SuperLayout({ children }: { children: React.ReactN
             <LogoMark variant="current" className="h-6 w-6" />
             Agreement Calculator · Operator
           </Link>
-          <div className="flex flex-1 items-center justify-end gap-4 text-[13px]">
+          <div className="flex flex-1 flex-wrap items-center justify-end gap-x-4 text-[13px]">
             <span className="font-mono text-[11px] uppercase tracking-eyebrow text-mist">{user.email}</span>
-            <Link href="/workspaces" className="font-medium text-mist hover:text-orange-tint">
+            <Link href="/workspaces" className="py-2 font-medium text-mist hover:text-orange-tint">
               Workspaces
             </Link>
             <form action={logout}>
-              <button type="submit" className="font-medium text-mist hover:text-orange-tint">
+              <button type="submit" className="py-2 font-medium text-mist hover:text-orange-tint">
                 Sign out
               </button>
             </form>
