@@ -7,9 +7,10 @@ import { createDraft } from "./actions";
 
 export const dynamic = "force-dynamic";
 
+/** Guide colours for catalogue versioning; fixed, not accent-derived. */
 const STATUS_CLASS: Record<string, string> = {
-  DRAFT: "bg-orange-tint/25 text-orange-dark",
-  PUBLISHED: "bg-navy text-white",
+  DRAFT: "bg-status-draft text-status-draft-fg",
+  PUBLISHED: "bg-status-published text-status-published-fg",
   ARCHIVED: "bg-mist text-slate",
 };
 
@@ -59,7 +60,7 @@ export default async function PricingVersionsPage() {
           </thead>
           <tbody>
             {versions.map((version) => (
-              <tr key={version.id} className="border-b border-mist last:border-0 hover:bg-paper">
+              <tr key={version.id} className="border-b border-steel last:border-0 hover:bg-paper">
                 <td className="px-5 py-3">
                   <Link href={`/admin/pricing/${version.id}`} className="font-semibold text-orange">
                     {version.label}

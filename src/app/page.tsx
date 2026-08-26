@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { slugFromHost } from "@/lib/tenant";
 import { PRICE_PER_MONTH, TRIAL_DAYS } from "@/lib/trial";
+import { LogoMark } from "@/components/logo";
 import { MarketingFooter, MarketingHeader } from "@/components/marketing-chrome";
 
 export const dynamic = "force-dynamic";
@@ -57,7 +58,11 @@ export default async function Home() {
       <main>
         <section className="bg-navy">
           <div className="mx-auto max-w-content px-6 py-20 md:px-10 md:py-28">
-            <p className="eyebrow">Agreement pricing for MSPs</p>
+            <p className="eyebrow flex items-center gap-3">
+              {/* Single-colour on the navy hero: the primary lockup's navy quadrant would vanish. */}
+              <LogoMark variant="current" className="h-5 w-5" />
+              Agreement pricing for MSPs
+            </p>
             <h1 className="mt-4 max-w-3xl text-[44px] leading-[48px] text-white md:text-[56px] md:leading-[60px]">
               Price every agreement the same way, and prove the margin
             </h1>

@@ -326,7 +326,7 @@ export function CalculatorClient({
                       ? [...result.advantage.lines, ...result.pinnacle.lines]
                       : result.advantage.lines
                     ).map((l) => (
-                      <tr key={`${l.tier}-${l.key}`} className="border-b border-mist">
+                      <tr key={`${l.tier}-${l.key}`} className="border-b border-steel">
                         <td className="py-2">
                           {l.label}
                           {l.tier === "PINNACLE" ? (
@@ -384,7 +384,10 @@ export function CalculatorClient({
                       Labor {result.split.laborPct}%
                     </span>
                   ) : null}
-                  <span className="bg-orange py-2" style={{ width: `${result.split.sgmPct}%` }}>
+                  <span
+                    className="bg-orange py-2 text-orange-contrast"
+                    style={{ width: `${result.split.sgmPct}%` }}
+                  >
                     GM {result.split.sgmPct}%
                   </span>
                 </div>

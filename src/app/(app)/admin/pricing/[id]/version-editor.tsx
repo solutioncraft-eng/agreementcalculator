@@ -188,7 +188,7 @@ export function VersionEditor({
             <tbody>
               {items.map((item) =>
                 editing === item.id ? (
-                  <tr key={item.id} className="border-b border-mist bg-paper">
+                  <tr key={item.id} className="border-b border-steel bg-paper">
                     <td colSpan={editable ? 7 : 6} className="py-4">
                       <ItemForm
                         action={itemAction}
@@ -201,7 +201,7 @@ export function VersionEditor({
                     </td>
                   </tr>
                 ) : (
-                  <tr key={item.id} className="border-b border-mist last:border-0">
+                  <tr key={item.id} className="border-b border-steel last:border-0">
                     <td className="py-3 font-medium text-navy">{item.label}</td>
                     <td className="py-3 text-slate">{item.vendor ?? "—"}</td>
                     <td className="py-3">{UNITS.find((u) => u.value === item.unit)?.label ?? item.unit}</td>
@@ -209,7 +209,7 @@ export function VersionEditor({
                       <span
                         className={clsx(
                           "rounded-brand px-2 py-1 font-display text-[10px] font-bold uppercase tracking-eyebrow",
-                          item.tier === "PINNACLE" ? "bg-orange text-white" : "bg-navy text-white",
+                          item.tier === "PINNACLE" ? "bg-orange text-orange-contrast" : "bg-navy text-white",
                         )}
                       >
                         {item.tier}
