@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { canAdminister, canReview, membershipsFor, requireTenant } from "@/lib/auth";
 import { accentStyle } from "@/lib/branding";
 import { APP_VERSION } from "@/lib/version";
+import { describeDaysLeft, trialInfo } from "@/lib/trial";
 import { NavLink } from "@/components/nav-link";
 import { TenantLogo } from "@/components/tenant-logo";
 import { WorkspaceSwitcher } from "@/components/workspace-switcher";
@@ -22,6 +23,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const myOpen = await db.quoteRequest.count({
     where: { submittedById: user.id, status: { in: ["PENDING", "CHANGES_REQUESTED"] } },
   });
+  const trial = trialInfo(tenant);
 
   return (
     <div className="min-h-screen" style={accentStyle(tenant.accentColor)}>
@@ -69,6 +71,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </div>
         </div>
       </header>
+
+      {trial.onTrial ? (
+        <div className="border-b border-mist bg-orange-tint/20 px-6 py-2 text-center text-[13px] text-navy">
+          <span className="font-display text-[11px] font-bold uppercase tracking-eyebrow">Trial</span>{" "}
+          {describeDaysLeft(trial.daysLeft)} · everything you set up here is kept when {tenant.name} is
+          activated
+        </div>
+      ) : null}
 
       <div className="bg-navy px-6 py-2 text-center font-display text-[11px] font-bold uppercase tracking-eyebrow text-mist">
         Internal use only · tool costs and margins are confidential

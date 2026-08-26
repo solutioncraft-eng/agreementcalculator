@@ -1,42 +1,12 @@
 import { headers } from "next/headers";
 import type { Tenant } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { RESERVED_SLUGS } from "@/lib/slug";
 
-/**
- * Slugs that can never be a tenant: they are the product's own hostnames.
- */
-export const RESERVED_SLUGS = new Set([
-  "www",
-  "app",
-  "apps",
-  "admin",
-  "api",
-  "super",
-  "mail",
-  "static",
-  "assets",
-  "status",
-  "docs",
-  "support",
-  "billing",
-]);
-
-const SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])$/;
-
-export function isValidSlug(slug: string): boolean {
-  return SLUG_PATTERN.test(slug) && !RESERVED_SLUGS.has(slug);
-}
-
-export function slugFromName(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 30);
-}
+export { RESERVED_SLUGS, isValidSlug, slugFromName } from "@/lib/slug";
 
 /** The host the product itself answers on, e.g. `agreementcalculator.com`. */
-function rootDomain(): string {
+export function rootDomain(): string {
   const configured = process.env.APP_ROOT_DOMAIN;
   if (configured) return configured.toLowerCase();
   try {

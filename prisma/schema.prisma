@@ -98,6 +98,11 @@ model Tenant {
   /// Locked once a pricing version is published; only a super admin can change it.
   pricingModel PricingModel @default(COST_PLUS)
 
+  /// When the free trial stops. Set for workspaces that signed themselves up;
+  /// null means there is no deadline, which is how an operator-created
+  /// workspace and every paying one behave.
+  trialEndsAt DateTime?
+
   // ── Branding ─────────────────────────────────────────────────────
   /// Public URL of the tenant's uploaded logo. Falls back to the product mark.
   logoUrl     String?
