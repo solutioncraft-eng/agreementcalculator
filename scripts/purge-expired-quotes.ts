@@ -12,7 +12,7 @@ async function main() {
   const now = new Date();
   const expired = await prisma.quoteRequest.findMany({
     where: { purgeAfter: { lt: now } },
-    select: { id: true, ref: true, clientName: true },
+    select: { id: true, ref: true, clientName: true, tenantId: true },
   });
 
   for (const quote of expired) {
@@ -20,6 +20,7 @@ async function main() {
     await prisma.quoteRequest.delete({ where: { id: quote.id } });
     await prisma.auditEvent.create({
       data: {
+        tenantId: quote.tenantId,
         action: "QUOTE_PURGED",
         entity: "QuoteRequest",
         entityId: quote.id,

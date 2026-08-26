@@ -1,9 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { prisma } from "@/lib/db";
 import { audit, type AuditAction } from "@/lib/audit";
-import { canReview, requireUser } from "@/lib/auth";
+import { canReview, requireTenant } from "@/lib/auth";
 import { appUrl, sendMail } from "@/lib/email";
 import { reviewDecisionSchema } from "@/lib/schemas";
 import { STATUS_LABEL } from "@/lib/quotes";
@@ -22,8 +21,8 @@ const AUDIT_ACTION: Record<string, AuditAction> = {
 };
 
 export async function decide(_prev: DecisionState, formData: FormData): Promise<DecisionState> {
-  const user = await requireUser();
-  if (!canReview(user.role)) return { error: "Only leadership can review quotes." };
+  const { user, role, tenant, db } = await requireTenant();
+  if (!canReview(role)) return { error: "Only leadership can review quotes." };
 
   const parsed = reviewDecisionSchema.safeParse({
     quoteId: formData.get("quoteId"),
@@ -37,7 +36,7 @@ export async function decide(_prev: DecisionState, formData: FormData): Promise<
     return { error: "Add a note so the account manager knows what to change." };
   }
 
-  const quote = await prisma.quoteRequest.findUnique({
+  const quote = await db.quoteRequest.findUnique({
     where: { id: quoteId },
     include: { submittedBy: { select: { email: true, name: true } } },
   });
@@ -49,18 +48,21 @@ export async function decide(_prev: DecisionState, formData: FormData): Promise<
   const previous = quote.status;
   const status: QuoteStatus = decision === "COMMENTED" ? quote.status : (decision as QuoteStatus);
 
-  await prisma.$transaction([
-    prisma.quoteRequest.update({
-      where: { id: quote.id },
-      data: {
-        status,
-        decidedAt: decision === "COMMENTED" ? quote.decidedAt : new Date(),
-        reviews: {
-          create: { action: decision as ReviewAction, comment: comment || null, actorId: user.id },
+  await db.quoteRequest.update({
+    where: { id: quote.id },
+    data: {
+      status,
+      decidedAt: decision === "COMMENTED" ? quote.decidedAt : new Date(),
+      reviews: {
+        create: {
+          tenantId: tenant.id,
+          action: decision as ReviewAction,
+          comment: comment || null,
+          actorId: user.id,
         },
       },
-    }),
-  ]);
+    },
+  });
 
   await audit({
     action: AUDIT_ACTION[decision],
@@ -69,12 +71,13 @@ export async function decide(_prev: DecisionState, formData: FormData): Promise<
     summary: `${quote.ref} (${quote.clientName}) — ${STATUS_LABEL[status].toLowerCase()} by ${user.name}`,
     before: { status: previous },
     after: { status, comment: comment || null },
+    tenantId: tenant.id,
     actor: user,
   });
 
   await sendMail({
     to: [quote.submittedBy.email],
-    subject: `[${STATUS_LABEL[status]}] ${quote.ref} · ${quote.clientName}`,
+    subject: `[${tenant.name}] ${STATUS_LABEL[status]} · ${quote.ref} · ${quote.clientName}`,
     heading:
       decision === "APPROVED"
         ? "Your quote was approved"
@@ -101,21 +104,21 @@ export async function decide(_prev: DecisionState, formData: FormData): Promise<
 }
 
 export async function withdraw(_prev: DecisionState, formData: FormData): Promise<DecisionState> {
-  const user = await requireUser();
+  const { user, role, tenant, db } = await requireTenant();
   const quoteId = String(formData.get("quoteId") ?? "");
-  const quote = await prisma.quoteRequest.findUnique({ where: { id: quoteId } });
+  const quote = await db.quoteRequest.findUnique({ where: { id: quoteId } });
   if (!quote) return { error: "That quote no longer exists." };
-  if (quote.submittedById !== user.id && user.role !== "ADMIN") {
+  if (quote.submittedById !== user.id && role !== "ADMIN") {
     return { error: "Only the account manager who submitted it can withdraw it." };
   }
   if (quote.status === "APPROVED") return { error: "Approved quotes cannot be withdrawn." };
 
-  await prisma.quoteRequest.update({
+  await db.quoteRequest.update({
     where: { id: quote.id },
     data: {
       status: "WITHDRAWN",
       decidedAt: new Date(),
-      reviews: { create: { action: "WITHDRAWN", actorId: user.id } },
+      reviews: { create: { tenantId: tenant.id, action: "WITHDRAWN", actorId: user.id } },
     },
   });
 
@@ -126,6 +129,7 @@ export async function withdraw(_prev: DecisionState, formData: FormData): Promis
     summary: `${quote.ref} withdrawn by ${user.name}`,
     before: { status: quote.status },
     after: { status: "WITHDRAWN" },
+    tenantId: tenant.id,
     actor: user,
   });
 

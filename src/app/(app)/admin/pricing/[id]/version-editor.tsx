@@ -9,7 +9,7 @@ import {
   publishVersion,
   saveBundle,
   saveCogsItem,
-  updateModel,
+  updateVersion,
   type AdminState,
 } from "../actions";
 
@@ -26,13 +26,18 @@ interface VersionView {
   status: string;
   costBasis: string;
   notes: string | null;
-  laborMultiplier: number;
-  defaultSgmPct: number;
-  maxSgmPct: number;
-  minPerUserFloor: number;
-  addonMultiplier: number;
+  model: string;
+  modelLabel: string;
+  settings: Record<string, number>;
   publishedAt: string | null;
   publishedBy: string | null;
+}
+
+interface SettingField {
+  name: string;
+  label: string;
+  suffix: string;
+  step: string;
 }
 
 interface ItemView {
@@ -70,15 +75,19 @@ function Feedback({ state }: { state: AdminState }) {
 
 export function VersionEditor({
   version,
+  fields,
+  tierLabels,
   items,
   bundles,
 }: {
   version: VersionView;
+  fields: SettingField[];
+  tierLabels: { ADVANTAGE: string; PINNACLE: string };
   items: ItemView[];
   bundles: BundleView[];
 }) {
   const editable = version.status === "DRAFT";
-  const [modelState, modelAction, savingModel] = useActionState<AdminState, FormData>(updateModel, {});
+  const [modelState, modelAction, savingModel] = useActionState<AdminState, FormData>(updateVersion, {});
   const [itemState, itemAction, savingItem] = useActionState<AdminState, FormData>(saveCogsItem, {});
   const [deleteState, deleteAction] = useActionState<AdminState, FormData>(deleteCogsItem, {});
   const [bundleState, bundleAction, savingBundle] = useActionState<AdminState, FormData>(saveBundle, {});
@@ -113,51 +122,25 @@ export function VersionEditor({
       <Feedback state={publishState} />
 
       <section className="card">
-        <h2 className="text-[18px]">Pricing model</h2>
+        <h2 className="text-[18px]">Pricing model — {version.modelLabel}</h2>
+        <p className="mt-1 text-[14px] text-slate">
+          The model is chosen when the workspace is created; these are its settings.
+        </p>
         <form action={modelAction} className="mt-4 grid gap-4 md:grid-cols-3">
           <input type="hidden" name="versionId" value={version.id} />
           <Field name="label" label="Version label" defaultValue={version.label} disabled={!editable} />
           <Field name="costBasis" label="Cost basis" defaultValue={version.costBasis} disabled={!editable} />
-          <Field
-            name="laborMultiplier"
-            label="Labor multiplier (× tool cost)"
-            type="number"
-            step="0.01"
-            defaultValue={version.laborMultiplier}
-            disabled={!editable}
-          />
-          <Field
-            name="defaultSgmPct"
-            label="Default service gross margin %"
-            type="number"
-            step="0.5"
-            defaultValue={version.defaultSgmPct}
-            disabled={!editable}
-          />
-          <Field
-            name="maxSgmPct"
-            label="Maximum service gross margin %"
-            type="number"
-            step="0.5"
-            defaultValue={version.maxSgmPct}
-            disabled={!editable}
-          />
-          <Field
-            name="minPerUserFloor"
-            label="Minimum per-user floor $"
-            type="number"
-            step="1"
-            defaultValue={version.minPerUserFloor}
-            disabled={!editable}
-          />
-          <Field
-            name="addonMultiplier"
-            label="Pinnacle add-on multiplier"
-            type="number"
-            step="0.01"
-            defaultValue={version.addonMultiplier}
-            disabled={!editable}
-          />
+          {fields.map((field) => (
+            <Field
+              key={field.name}
+              name={field.name}
+              label={`${field.label} ${field.suffix}`}
+              type="number"
+              step={field.step}
+              defaultValue={version.settings[field.name]}
+              disabled={!editable}
+            />
+          ))}
           <div className="md:col-span-2">
             <label className="label" htmlFor="notes">
               Notes
@@ -174,7 +157,7 @@ export function VersionEditor({
           {editable ? (
             <div className="md:col-span-3">
               <button type="submit" className="btn-navy" disabled={savingModel}>
-                {savingModel ? "Saving…" : "Save pricing model"}
+                {savingModel ? "Saving…" : "Save pricing settings"}
               </button>
             </div>
           ) : null}
@@ -185,7 +168,7 @@ export function VersionEditor({
       <section className="card">
         <h2 className="text-[18px]">COGS items</h2>
         <p className="mt-1 text-[14px] text-slate">
-          Each item is billed to InfinIT on a unit basis. The basis decides what it multiplies by: user count,
+          Each item is billed to you on a unit basis. The basis decides what it multiplies by: user count,
           device count, location count, or once per agreement.
         </p>
 
@@ -210,6 +193,7 @@ export function VersionEditor({
                       <ItemForm
                         action={itemAction}
                         versionId={version.id}
+                        tierLabels={tierLabels}
                         item={item}
                         pending={savingItem}
                         onDone={() => setEditing(null)}
@@ -259,7 +243,12 @@ export function VersionEditor({
         {editable ? (
           <div className="mt-6 border-t border-mist pt-5">
             <h3 className="label">Add an item</h3>
-            <ItemForm action={itemAction} versionId={version.id} pending={savingItem} />
+            <ItemForm
+              action={itemAction}
+              versionId={version.id}
+              tierLabels={tierLabels}
+              pending={savingItem}
+            />
           </div>
         ) : null}
       </section>
@@ -321,12 +310,14 @@ export function VersionEditor({
 function ItemForm({
   action,
   versionId,
+  tierLabels,
   item,
   pending,
   onDone,
 }: {
   action: (formData: FormData) => void;
   versionId: string;
+  tierLabels: { ADVANTAGE: string; PINNACLE: string };
   item?: ItemView;
   pending: boolean;
   onDone?: () => void;
@@ -366,8 +357,8 @@ function ItemForm({
           defaultValue={item?.tier ?? "ADVANTAGE"}
           className="field mt-1"
         >
-          <option value="ADVANTAGE">Advantage</option>
-          <option value="PINNACLE">Pinnacle add-on</option>
+          <option value="ADVANTAGE">{tierLabels.ADVANTAGE}</option>
+          <option value="PINNACLE">{tierLabels.PINNACLE} add-on</option>
         </select>
       </div>
       <Field

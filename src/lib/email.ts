@@ -14,7 +14,7 @@ const pass = process.env.SMTP_PASSWORD;
 const from =
   process.env.EMAIL_FROM ??
   process.env.SMTP_FROM ??
-  "infinIT Calculator <noreply@apps.solutioncraft.ai>";
+  "Agreement Calculator <noreply@apps.solutioncraft.ai>";
 
 export const emailConfigured = Boolean(resendKey || host);
 
@@ -55,12 +55,12 @@ function render(mail: Mail): string {
   return `<!doctype html><html><body style="margin:0;background:#F7F7F5;padding:32px 16px;font-family:'IBM Plex Sans',Segoe UI,Helvetica,Arial,sans-serif;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
     <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:6px;overflow:hidden;">
-      <tr><td style="background:#12253A;padding:20px 28px;color:#fff;font-weight:700;font-size:16px;letter-spacing:0.02em;">infinIT Agreement Calculator</td></tr>
+      <tr><td style="background:#12253A;padding:20px 28px;color:#fff;font-weight:700;font-size:16px;letter-spacing:0.02em;">Agreement Calculator</td></tr>
       <tr><td style="padding:28px;">
         <h1 style="margin:0 0 16px;font-size:22px;line-height:1.3;color:#12253A;">${esc(mail.heading)}</h1>
         ${body}${action}
       </td></tr>
-      <tr><td style="padding:16px 28px;background:#F7F7F5;color:#5A6672;font-size:12px;">Internal pricing tool — confidential. Do not forward outside InfinIT.</td></tr>
+      <tr><td style="padding:16px 28px;background:#F7F7F5;color:#5A6672;font-size:12px;">Confidential pricing tool — do not forward outside your organisation.</td></tr>
     </table>
   </td></tr></table></body></html>`;
 }

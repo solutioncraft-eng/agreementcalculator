@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" role="img" aria-label="Agreement Calculator">
+  <rect width="48" height="48" rx="4" fill="#12253A"/>
+  <rect x="10" y="11" width="28" height="8" rx="2" fill="#F7F7F5"/>
+  <rect x="10" y="24" width="8" height="6" rx="2" fill="#E7EAED"/>
+  <rect x="20" y="24" width="8" height="6" rx="2" fill="#E7EAED"/>
+  <rect x="30" y="24" width="8" height="13" rx="2" fill="#F26B21"/>
+  <rect x="10" y="33" width="8" height="4" rx="2" fill="#E7EAED"/>
+  <rect x="20" y="33" width="8" height="4" rx="2" fill="#E7EAED"/>
+</svg>

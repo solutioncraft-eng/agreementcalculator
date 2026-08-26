@@ -1,16 +1,16 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
+import { PRICING_MODELS, settingsRecord } from "@/lib/pricing/models";
 import { VersionEditor } from "./version-editor";
 
 export const dynamic = "force-dynamic";
 
 export default async function PricingVersionPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  await requireRole("ADMIN");
+  const { tenant, db } = await requireRole("ADMIN");
 
-  const version = await prisma.pricingVersion.findUnique({
+  const version = await db.pricingVersion.findUnique({
     where: { id },
     include: {
       cogsItems: { orderBy: [{ tier: "asc" }, { sortOrder: "asc" }] },
@@ -33,14 +33,14 @@ export default async function PricingVersionPage({ params }: { params: Promise<{
           status: version.status,
           costBasis: version.costBasis,
           notes: version.notes,
-          laborMultiplier: version.laborMultiplier.toNumber(),
-          defaultSgmPct: version.defaultSgmPct.toNumber(),
-          maxSgmPct: version.maxSgmPct.toNumber(),
-          minPerUserFloor: version.minPerUserFloor.toNumber(),
-          addonMultiplier: version.addonMultiplier.toNumber(),
+          model: version.model,
+          modelLabel: PRICING_MODELS[version.model].label,
+          settings: settingsRecord(version.model, version.settings),
           publishedAt: version.publishedAt?.toISOString() ?? null,
           publishedBy: version.publishedBy?.name ?? null,
         }}
+        fields={[...PRICING_MODELS[version.model].fields]}
+        tierLabels={{ ADVANTAGE: tenant.advantageLabel, PINNACLE: tenant.pinnacleLabel }}
         items={version.cogsItems.map((item) => ({
           id: item.id,
           label: item.label,

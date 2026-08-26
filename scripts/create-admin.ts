@@ -2,7 +2,10 @@
  * Creates (or promotes) an administrator from the deploy shell, so the first
  * real account never needs a password committed to config.
  *
- *   npm run admin:create -- someone@example.com "Their Name"
+ *   npm run admin:create -- someone@example.com "Their Name" [workspace-slug]
+ *
+ * The workspace slug may be omitted when exactly one workspace exists. Set
+ * SUPER_ADMIN=1 to also give the account the product-level super-admin flag.
  *
  * Prints a one-time temporary password and forces a change at first sign-in.
  * Pass a password on stdin (`echo -n 'secret' | npm run admin:create -- ...`)
@@ -22,10 +25,28 @@ async function readStdin(): Promise<string> {
   return Buffer.concat(chunks).toString("utf8").trim();
 }
 
+async function onlyTenant() {
+  const tenants = await prisma.tenant.findMany({ take: 2 });
+  return tenants.length === 1 ? tenants[0] : null;
+}
+
 async function main() {
-  const [emailArg, nameArg] = process.argv.slice(2);
+  const [emailArg, nameArg, slugArg] = process.argv.slice(2);
   if (!emailArg) {
-    console.error('Usage: npm run admin:create -- email@example.com "Full Name"');
+    console.error('Usage: npm run admin:create -- email@example.com "Full Name" [workspace-slug]');
+    process.exitCode = 1;
+    return;
+  }
+
+  const tenant = slugArg
+    ? await prisma.tenant.findUnique({ where: { slug: slugArg.trim().toLowerCase() } })
+    : await onlyTenant();
+  if (!tenant) {
+    console.error(
+      slugArg
+        ? `No workspace with slug "${slugArg}". Create it first.`
+        : "Pass the workspace slug — there is not exactly one workspace to default to.",
+    );
     process.exitCode = 1;
     return;
   }
@@ -36,27 +57,41 @@ async function main() {
   const password = supplied || randomBytes(9).toString("base64url");
   const passwordHash = await bcrypt.hash(password, 12);
 
+  const superAdmin = process.env.SUPER_ADMIN === "1";
   const existing = await prisma.user.findUnique({ where: { email } });
   const user = existing
     ? await prisma.user.update({
         where: { email },
-        data: { role: "ADMIN", active: true, passwordHash, mustReset: !supplied },
+        data: {
+          active: true,
+          passwordHash,
+          mustReset: !supplied,
+          ...(superAdmin ? { isSuperAdmin: true } : {}),
+        },
       })
     : await prisma.user.create({
-        data: { email, name, role: "ADMIN", passwordHash, mustReset: !supplied },
+        data: { email, name, passwordHash, mustReset: !supplied, isSuperAdmin: superAdmin },
       });
+
+  await prisma.membership.upsert({
+    where: { tenantId_userId: { tenantId: tenant.id, userId: user.id } },
+    update: { role: "ADMIN" },
+    create: { tenantId: tenant.id, userId: user.id, role: "ADMIN" },
+  });
 
   await prisma.auditEvent.create({
     data: {
+      tenantId: tenant.id,
       action: existing ? "USER_UPDATED" : "USER_CREATED",
       entity: "User",
       entityId: user.id,
-      summary: `${email} ${existing ? "promoted to" : "created as"} ADMIN from the command line`,
+      summary: `${email} ${existing ? "promoted to" : "created as"} ADMIN of ${tenant.slug} from the command line`,
       actorEmail: "cli",
     },
   });
 
-  console.log(`${existing ? "Updated" : "Created"} administrator ${email}`);
+  console.log(`${existing ? "Updated" : "Created"} administrator ${email} in ${tenant.slug}`);
+  if (superAdmin) console.log("Super-admin flag set.");
   if (supplied) {
     console.log("Password set from stdin.");
   } else {

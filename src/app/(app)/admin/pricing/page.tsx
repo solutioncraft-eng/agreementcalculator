@@ -1,7 +1,7 @@
 import Link from "next/link";
 import clsx from "clsx";
-import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
+import { PRICING_MODELS } from "@/lib/pricing/models";
 import { formatUtc } from "@/lib/quotes";
 import { createDraft } from "./actions";
 
@@ -14,8 +14,8 @@ const STATUS_CLASS: Record<string, string> = {
 };
 
 export default async function PricingVersionsPage() {
-  await requireRole("ADMIN");
-  const versions = await prisma.pricingVersion.findMany({
+  const { tenant, db } = await requireRole("ADMIN");
+  const versions = await db.pricingVersion.findMany({
     orderBy: { createdAt: "desc" },
     include: {
       createdBy: { select: { name: true } },
@@ -32,8 +32,9 @@ export default async function PricingVersionsPage() {
           <p className="eyebrow">Administration</p>
           <h1 className="mt-2 text-[32px] leading-9">Pricing versions</h1>
           <p className="mt-2 max-w-2xl text-slate">
-            COGS items, unit allocation and the pricing model live inside a version. Publishing freezes it:
-            every quote and PDF points at the exact version it was produced with.
+            COGS items, unit allocation and the model settings live inside a version. Publishing freezes it:
+            every quote and PDF points at the exact version it was produced with. This workspace prices on{" "}
+            <span className="font-semibold text-navy">{PRICING_MODELS[tenant.pricingModel].label}</span>.
           </p>
         </div>
         <form action={createDraft}>

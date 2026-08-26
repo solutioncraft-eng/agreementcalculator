@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { requestContext, type SessionUser } from "@/lib/auth";
+import { requestContext, type SessionAccount } from "@/lib/auth";
 
 export type AuditAction =
   | "LOGIN"
@@ -29,16 +29,31 @@ export type AuditAction =
   | "QUOTE_COMMENTED"
   | "QUOTE_PURGED"
   | "PDF_EXPORTED"
-  | "PDF_EXPORT_BLOCKED";
+  | "PDF_EXPORT_BLOCKED"
+  | "TENANT_CREATED"
+  | "TENANT_UPDATED"
+  | "TENANT_SUSPENDED"
+  | "TENANT_REACTIVATED"
+  | "TENANT_BRANDING_UPDATED"
+  | "MEMBERSHIP_CREATED"
+  | "MEMBERSHIP_UPDATED"
+  | "MEMBERSHIP_REMOVED"
+  | "WORKSPACE_SWITCHED";
 
 interface AuditInput {
   action: AuditAction;
   summary: string;
+  /**
+   * Workspace the event belongs to. Left unset only for product-level events
+   * — sign-ins before a workspace is chosen, and super-admin actions — which
+   * is why the column is nullable.
+   */
+  tenantId?: string | null;
   entity?: string;
   entityId?: string;
   before?: Prisma.InputJsonValue;
   after?: Prisma.InputJsonValue;
-  actor?: SessionUser | null;
+  actor?: SessionAccount | null;
   actorEmail?: string;
 }
 
@@ -46,12 +61,16 @@ interface AuditInput {
  * Appends an immutable audit event. Never throws into the caller's path — an
  * audit write failure must not silently break the action, but it also must not
  * take the request down; it is logged instead.
+ *
+ * Writes through the unscoped client on purpose: an audit event is the one
+ * thing that must be recordable before a workspace is known.
  */
 export async function audit(input: AuditInput): Promise<void> {
   try {
     const ctx = await requestContext();
     await prisma.auditEvent.create({
       data: {
+        tenantId: input.tenantId ?? null,
         action: input.action,
         summary: input.summary,
         entity: input.entity,

@@ -25,7 +25,7 @@ export async function downloadExport(request: ExportRequest): Promise<string | n
 
   const blob = await response.blob();
   const disposition = response.headers.get("Content-Disposition") ?? "";
-  const name = /filename="([^"]+)"/.exec(disposition)?.[1] ?? "infinit-export.pdf";
+  const name = /filename="([^"]+)"/.exec(disposition)?.[1] ?? "agreement-export.pdf";
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;

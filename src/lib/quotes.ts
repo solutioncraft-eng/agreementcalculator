@@ -1,5 +1,5 @@
-import type { QuoteRequest, QuoteStatus } from "@prisma/client";
-import type { CalcInputs } from "@/lib/pricing/engine";
+import type { QuoteRequest, QuoteStatus, Tenant } from "@prisma/client";
+import type { CalcInputs, Tier } from "@/lib/pricing/engine";
 
 export const STATUS_LABEL: Record<QuoteStatus, string> = {
   PENDING: "Awaiting review",
@@ -20,11 +20,14 @@ export const STATUS_CLASS: Record<QuoteStatus, string> = {
 export const TRIGGER_LABEL: Record<string, string> = {
   SGM_NON_DEFAULT: "Service gross margin off default",
   FLOOR_CHANGED: "Per-user floor changed",
-  ADVANTAGE_BELOW_FLOOR: "Advantage below floor",
-  PINNACLE_BELOW_FLOOR: "Pinnacle below floor",
+  ADVANTAGE_BELOW_FLOOR: "Base tier below floor",
+  PINNACLE_BELOW_FLOOR: "Upper tier below floor",
   FLOOR_OVERRIDE: "Floor overridden",
   DISCOUNT_CAPPED_AT_COST: "Bundle discount capped at cost",
   ADDON_MULTIPLIER_NON_DEFAULT: "Add-on multiplier off default",
+  MARKUP_BELOW_DEFAULT: "Markup off default",
+  MARKUP_BELOW_MINIMUM: "Markup below minimum",
+  DISCOUNT_OVER_MAX: "Discount over maximum",
 };
 
 export function quoteInputs(quote: QuoteRequest): CalcInputs {
@@ -36,12 +39,14 @@ export function quoteInputs(quote: QuoteRequest): CalcInputs {
     perUserFloor: quote.perUserFloor.toNumber(),
     floorOverride: quote.floorOverride,
     addonMultiplier: quote.addonMultiplier.toNumber(),
+    markupMultiple: quote.markupMultiple.toNumber(),
     bundleKey: quote.bundleKey,
   };
 }
 
-export function tierName(tier: "ADVANTAGE" | "PINNACLE"): string {
-  return tier === "PINNACLE" ? "infinIT Pinnacle" : "infinIT Advantage";
+/** Tier name as this workspace calls it. */
+export function tierName(tenant: Pick<Tenant, "advantageLabel" | "pinnacleLabel">, tier: Tier): string {
+  return tier === "PINNACLE" ? tenant.pinnacleLabel : tenant.advantageLabel;
 }
 
 export function formatUtc(date: Date): string {

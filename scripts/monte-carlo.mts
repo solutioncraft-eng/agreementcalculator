@@ -1,14 +1,8 @@
 import "dotenv/config";
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
-import {
-  calculate,
-  type CalcInputs,
-  type CalcResult,
-  type PricingConfig,
-  type TriggerCode,
-} from "../src/lib/pricing/engine";
-import { getActiveConfig } from "../src/lib/pricing/config";
+import type { CalcInputs, CalcResult, CostPlusConfig, TriggerCode } from "../src/lib/pricing/engine";
+import { calculate } from "../src/lib/pricing/models";
 import { seedConfig } from "../src/lib/pricing/seed-config";
 import { renderMonteCarloReport, type Simulation } from "../src/lib/pdf/monte-carlo-report";
 
@@ -43,7 +37,7 @@ export interface InvariantSpec {
   title: string;
   detail: string;
   /** Returns an explanation when violated, or null when it holds. */
-  check: (result: CalcResult, config: PricingConfig, rng: () => number) => string | null;
+  check: (result: CalcResult, config: CostPlusConfig, rng: () => number) => string | null;
 }
 
 const near = (a: number, b: number, tol = 1e-6) => Math.abs(a - b) <= tol * Math.max(1, Math.abs(a), Math.abs(b));
@@ -124,7 +118,7 @@ export const INVARIANTS: InvariantSpec[] = [
     title: "The margin formula is exact",
     detail: "standardRate x (1 - SGM) equals the cost floor, so the slider means what it says.",
     check: (r, config) => {
-      const sgm = Math.min(Math.max(r.inputs.sgmPct, 0), config.maxSgmPct) / 100;
+      const sgm = Math.min(Math.max(r.inputs.sgmPct, 0), config.settings.maxSgmPct) / 100;
       const implied = r.advantage.standardRate * (1 - sgm);
       return near(implied, r.advantage.costFloor, 1e-9)
         ? null
@@ -136,8 +130,8 @@ export const INVARIANTS: InvariantSpec[] = [
     title: "Service gross margin is capped at the version maximum",
     detail: "A slider beyond the published maximum is clamped rather than compounding into the rate.",
     check: (r, config) => {
-      const capped = Math.min(Math.max(r.inputs.sgmPct, 0), config.maxSgmPct) / 100;
-      const expected = (1 + config.laborMultiplier) / (1 - capped);
+      const capped = Math.min(Math.max(r.inputs.sgmPct, 0), config.settings.maxSgmPct) / 100;
+      const expected = (1 + config.settings.laborMultiplier) / (1 - capped);
       return near(r.multiplier, expected, 1e-9) ? null : "multiplier does not match the capped SGM";
     },
   },
@@ -163,10 +157,10 @@ export const INVARIANTS: InvariantSpec[] = [
       "A non-default margin, a changed floor, an override, a capped discount or a non-default add-on multiplier always flags the quote for leadership.",
     check: (r, config) => {
       const expected: TriggerCode[] = [];
-      if (r.inputs.sgmPct !== config.defaultSgmPct) expected.push("SGM_NON_DEFAULT");
-      if (r.inputs.perUserFloor !== config.minPerUserFloor) expected.push("FLOOR_CHANGED");
+      if (r.inputs.sgmPct !== config.settings.defaultSgmPct) expected.push("SGM_NON_DEFAULT");
+      if (r.inputs.perUserFloor !== config.settings.minPerUserFloor) expected.push("FLOOR_CHANGED");
       if (r.inputs.floorOverride) expected.push("FLOOR_OVERRIDE");
-      if (r.inputs.addonMultiplier !== config.addonMultiplier) expected.push("ADDON_MULTIPLIER_NON_DEFAULT");
+      if (r.inputs.addonMultiplier !== config.settings.addonMultiplier) expected.push("ADDON_MULTIPLIER_NON_DEFAULT");
       if (r.advantage.belowFloor) expected.push("ADVANTAGE_BELOW_FLOOR");
       if (r.pinnacle.belowFloor) expected.push("PINNACLE_BELOW_FLOOR");
       if (r.advantage.discountCappedAtCost || r.pinnacle.discountCappedAtCost) {
@@ -186,9 +180,9 @@ export const INVARIANTS: InvariantSpec[] = [
       "With published levers, no override and a rate above the floor, the quote stays exportable without review.",
     check: (r, config) => {
       const onPolicy =
-        r.inputs.sgmPct === config.defaultSgmPct &&
-        r.inputs.perUserFloor === config.minPerUserFloor &&
-        r.inputs.addonMultiplier === config.addonMultiplier &&
+        r.inputs.sgmPct === config.settings.defaultSgmPct &&
+        r.inputs.perUserFloor === config.settings.minPerUserFloor &&
+        r.inputs.addonMultiplier === config.settings.addonMultiplier &&
         !r.inputs.floorOverride &&
         !r.advantage.belowFloor &&
         !r.pinnacle.belowFloor &&
@@ -219,7 +213,7 @@ export const INVARIANTS: InvariantSpec[] = [
     title: "Raising service gross margin never lowers the rate",
     detail: "A one-point SGM increase (within the cap) always produces a greater or equal standard rate.",
     check: (r, config) => {
-      if (r.inputs.sgmPct >= config.maxSgmPct) return null;
+      if (r.inputs.sgmPct >= config.settings.maxSgmPct) return null;
       const richer = calculate(config, { ...r.inputs, sgmPct: r.inputs.sgmPct + 1 });
       return richer.advantage.standardRate < r.advantage.standardRate - EPS ? "standard rate fell as SGM rose" : null;
     },
@@ -246,7 +240,7 @@ function pick<T>(rng: () => number, values: readonly T[]): T {
 }
 
 /** Weighted mix of realistic client shapes plus deliberate edge cases. */
-function sampleInputs(rng: () => number, config: PricingConfig): CalcInputs {
+function sampleInputs(rng: () => number, config: CostPlusConfig): CalcInputs {
   const edge = rng() < 0.08;
   const users = edge ? pick(rng, [1, 1, 2, 3, 750, 1500]) : 3 + Math.floor(rng() ** 2 * 400);
   const devices = edge
@@ -254,9 +248,9 @@ function sampleInputs(rng: () => number, config: PricingConfig): CalcInputs {
     : Math.max(0, Math.round(users * (0.6 + rng() * 1.8)));
   const locations = edge ? pick(rng, [0, 1, 40]) : 1 + Math.floor(rng() ** 2 * 12);
 
-  const sgmPct = rng() < 0.45 ? config.defaultSgmPct : Math.round(rng() * 85 * 10) / 10;
-  const perUserFloor = rng() < 0.6 ? config.minPerUserFloor : Math.round((20 + rng() * 280) * 100) / 100;
-  const addonMultiplier = rng() < 0.6 ? config.addonMultiplier : Math.round(rng() * 900) / 100;
+  const sgmPct = rng() < 0.45 ? config.settings.defaultSgmPct : Math.round(rng() * 85 * 10) / 10;
+  const perUserFloor = rng() < 0.6 ? config.settings.minPerUserFloor : Math.round((20 + rng() * 280) * 100) / 100;
+  const addonMultiplier = rng() < 0.6 ? config.settings.addonMultiplier : Math.round(rng() * 900) / 100;
 
   return {
     users,
@@ -266,6 +260,7 @@ function sampleInputs(rng: () => number, config: PricingConfig): CalcInputs {
     perUserFloor,
     floorOverride: rng() < 0.15,
     addonMultiplier,
+    markupMultiple: 0,
     bundleKey: pick(rng, config.bundles).key,
   };
 }
@@ -277,9 +272,8 @@ function percentile(sorted: number[], p: number): number {
 }
 
 async function main() {
-  const dbConfig = await getActiveConfig().catch(() => null);
-  const config = dbConfig ?? seedConfig();
-  const configSource = dbConfig ? "published pricing version (database)" : "seed pricing version (no database)";
+  const config = seedConfig();
+  const configSource = "seed cost-plus pricing version";
 
   const rng = mulberry32(SEED);
   const invariantFailures = new Map<string, number>();

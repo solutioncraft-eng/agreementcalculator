@@ -1,4 +1,3 @@
-import Image from "next/image";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { PasswordForm } from "./password-form";
@@ -15,7 +14,9 @@ export default async function PasswordPage() {
   return (
     <div className="min-h-screen bg-paper px-6 py-16">
       <div className="mx-auto max-w-md">
-        <Image src="/infinit-logo.png" alt="infinIT" width={112} height={77} priority />
+        <p className="font-display text-[18px] font-bold uppercase tracking-eyebrow text-navy">
+          Agreement Calculator
+        </p>
         <div className="card mt-8">
           <p className="eyebrow">{account?.mustReset ? "First sign-in" : "Your account"}</p>
           <h1 className="mt-2 text-[26px] leading-8">Change your password</h1>

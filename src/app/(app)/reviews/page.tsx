@@ -1,21 +1,20 @@
-import { prisma } from "@/lib/db";
-import { canReview, requireUser } from "@/lib/auth";
+import { canReview, requireTenant } from "@/lib/auth";
 import { forbidden } from "@/lib/http";
 import { QuoteTable } from "@/components/quote-table";
 
 export const dynamic = "force-dynamic";
 
 export default async function ReviewsPage() {
-  const user = await requireUser();
-  if (!canReview(user.role)) forbidden();
+  const { role, tenant, db } = await requireTenant();
+  if (!canReview(role)) forbidden();
 
   const [pending, decided] = await Promise.all([
-    prisma.quoteRequest.findMany({
+    db.quoteRequest.findMany({
       where: { status: "PENDING" },
       orderBy: { createdAt: "asc" },
       include: { submittedBy: { select: { name: true } } },
     }),
-    prisma.quoteRequest.findMany({
+    db.quoteRequest.findMany({
       where: { status: { not: "PENDING" } },
       orderBy: { updatedAt: "desc" },
       take: 50,
@@ -36,12 +35,12 @@ export default async function ReviewsPage() {
         </p>
       </header>
 
-      {pending.length ? <QuoteTable quotes={pending} hrefBase="/reviews" showSubmitter /> : null}
+      {pending.length ? <QuoteTable quotes={pending} tenant={tenant} hrefBase="/reviews" showSubmitter /> : null}
 
       {decided.length ? (
         <section className="space-y-3">
           <h2 className="text-[20px]">Decided</h2>
-          <QuoteTable quotes={decided} hrefBase="/reviews" showSubmitter />
+          <QuoteTable quotes={decided} tenant={tenant} hrefBase="/reviews" showSubmitter />
         </section>
       ) : null}
     </div>

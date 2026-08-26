@@ -2,9 +2,16 @@
 
 import { useActionState } from "react";
 import clsx from "clsx";
-import { createUser, resendWelcome, resetPassword, updateUser, type UserState } from "./actions";
+import {
+  inviteMember,
+  removeMember,
+  resendWelcome,
+  resetPassword,
+  updateMember,
+  type UserState,
+} from "./actions";
 
-interface UserView {
+interface MemberView {
   id: string;
   name: string;
   email: string;
@@ -40,9 +47,16 @@ function Feedback({ state }: { state: UserState }) {
   return null;
 }
 
-export function UserAdmin({ users }: { users: UserView[] }) {
-  const [createState, createAction, creating] = useActionState<UserState, FormData>(createUser, {});
-  const [updateState, updateAction] = useActionState<UserState, FormData>(updateUser, {});
+export function UserAdmin({
+  workspaceName,
+  members,
+}: {
+  workspaceName: string;
+  members: MemberView[];
+}) {
+  const [inviteState, inviteAction, inviting] = useActionState<UserState, FormData>(inviteMember, {});
+  const [updateState, updateAction] = useActionState<UserState, FormData>(updateMember, {});
+  const [removeState, removeAction] = useActionState<UserState, FormData>(removeMember, {});
   const [resetState, resetAction] = useActionState<UserState, FormData>(resetPassword, {});
   const [welcomeState, welcomeAction] = useActionState<UserState, FormData>(resendWelcome, {});
 
@@ -50,7 +64,11 @@ export function UserAdmin({ users }: { users: UserView[] }) {
     <div className="space-y-6">
       <section className="card">
         <h2 className="text-[18px]">Add a person</h2>
-        <form action={createAction} className="mt-4 grid gap-4 md:grid-cols-4 md:items-end">
+        <p className="mt-1 text-[14px] text-slate">
+          If they already use the Agreement Calculator elsewhere, they keep their password and simply gain
+          access to {workspaceName}.
+        </p>
+        <form action={inviteAction} className="mt-4 grid gap-4 md:grid-cols-4 md:items-end">
           <div>
             <label className="label" htmlFor="new-name">
               Name
@@ -75,46 +93,46 @@ export function UserAdmin({ users }: { users: UserView[] }) {
               ))}
             </select>
           </div>
-          <button type="submit" className="btn-primary" disabled={creating}>
-            {creating ? "Creating…" : "Create account"}
+          <button type="submit" className="btn-primary" disabled={inviting}>
+            {inviting ? "Adding…" : "Add to workspace"}
           </button>
         </form>
-        <Feedback state={createState} />
+        <Feedback state={inviteState} />
       </section>
 
       <section className="card">
-        <h2 className="text-[18px]">People</h2>
+        <h2 className="text-[18px]">People in {workspaceName}</h2>
         <Feedback state={updateState} />
+        <Feedback state={removeState} />
         <Feedback state={resetState} />
         <Feedback state={welcomeState} />
         <ul className="mt-4 divide-y divide-mist border-t border-navy">
-          {users.map((user) => (
+          {members.map((member) => (
             <li
-              key={user.id}
+              key={member.id}
               className={clsx(
                 "flex flex-wrap items-center gap-x-6 gap-y-3 py-4 text-[14px]",
-                !user.active && "text-slate",
+                !member.active && "text-slate",
               )}
             >
               <div className="min-w-[220px] flex-1">
                 <p className="font-medium text-navy">
-                  {user.name}
-                  {user.active ? null : (
+                  {member.name}
+                  {member.active ? null : (
                     <span className="ml-2 font-mono text-[10px] uppercase text-slate">inactive</span>
                   )}
                 </p>
-                <p className="text-slate">{user.email}</p>
+                <p className="text-slate">{member.email}</p>
                 <p className="mt-1 font-mono text-[11px] text-slate">
-                  {user.lastLoginAt
-                    ? `Last sign-in ${user.lastLoginAt.slice(0, 16).replace("T", " ")} UTC`
+                  {member.lastLoginAt
+                    ? `Last sign-in ${member.lastLoginAt.slice(0, 16).replace("T", " ")} UTC`
                     : "Never signed in"}
                 </p>
               </div>
 
               <form action={updateAction} className="flex items-center gap-2">
-                <input type="hidden" name="userId" value={user.id} />
-                <input type="hidden" name="active" value={String(user.active)} />
-                <select name="role" defaultValue={user.role} className="field w-44 py-1">
+                <input type="hidden" name="userId" value={member.id} />
+                <select name="role" defaultValue={member.role} className="field w-44 py-1">
                   {ROLES.map((role) => (
                     <option key={role.value} value={role.value}>
                       {role.label}
@@ -128,23 +146,21 @@ export function UserAdmin({ users }: { users: UserView[] }) {
 
               <div className="flex flex-wrap items-center gap-2">
                 <form action={welcomeAction}>
-                  <input type="hidden" name="userId" value={user.id} />
-                  <button type="submit" className="btn-ghost btn-sm" disabled={!user.active}>
+                  <input type="hidden" name="userId" value={member.id} />
+                  <button type="submit" className="btn-ghost btn-sm" disabled={!member.active}>
                     Resend welcome email
                   </button>
                 </form>
                 <form action={resetAction}>
-                  <input type="hidden" name="userId" value={user.id} />
+                  <input type="hidden" name="userId" value={member.id} />
                   <button type="submit" className="btn-ghost btn-sm">
                     Reset password
                   </button>
                 </form>
-                <form action={updateAction}>
-                  <input type="hidden" name="userId" value={user.id} />
-                  <input type="hidden" name="role" value={user.role} />
-                  <input type="hidden" name="active" value={String(!user.active)} />
+                <form action={removeAction}>
+                  <input type="hidden" name="userId" value={member.id} />
                   <button type="submit" className="btn-ghost btn-sm text-orange-dark">
-                    {user.active ? "Deactivate" : "Reactivate"}
+                    Remove from workspace
                   </button>
                 </form>
               </div>

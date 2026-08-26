@@ -2,13 +2,12 @@
 
 import { randomBytes } from "node:crypto";
 import { redirect } from "next/navigation";
-import { prisma } from "@/lib/db";
 import { audit } from "@/lib/audit";
-import { requireUser } from "@/lib/auth";
+import { requireTenant } from "@/lib/auth";
 import { appUrl, sendMail } from "@/lib/email";
-import { calculate } from "@/lib/pricing/engine";
 import { getActiveConfig } from "@/lib/pricing/config";
-import { QUOTE_RETENTION_MONTHS } from "@/lib/pricing/defaults";
+import { calculate } from "@/lib/pricing/models";
+import { tierName } from "@/lib/quotes";
 import { submitQuoteSchema } from "@/lib/schemas";
 
 export interface SubmitState {
@@ -21,14 +20,14 @@ function newRef(): string {
   return `QR-${month}-${randomBytes(2).toString("hex").toUpperCase()}`;
 }
 
-function purgeDate(): Date {
+function purgeDate(retentionMonths: number): Date {
   const d = new Date();
-  d.setMonth(d.getMonth() + QUOTE_RETENTION_MONTHS);
+  d.setMonth(d.getMonth() + retentionMonths);
   return d;
 }
 
 export async function submitForReview(_prev: SubmitState, formData: FormData): Promise<SubmitState> {
-  const user = await requireUser();
+  const { user, tenant, db } = await requireTenant();
 
   const parsed = submitQuoteSchema.safeParse({
     clientName: formData.get("clientName"),
@@ -42,6 +41,7 @@ export async function submitForReview(_prev: SubmitState, formData: FormData): P
       perUserFloor: formData.get("perUserFloor"),
       floorOverride: formData.get("floorOverride") === "true",
       addonMultiplier: formData.get("addonMultiplier"),
+      markupMultiple: formData.get("markupMultiple"),
       bundleKey: formData.get("bundleKey"),
     },
   });
@@ -49,7 +49,7 @@ export async function submitForReview(_prev: SubmitState, formData: FormData): P
     return { error: parsed.error.issues[0]?.message ?? "Check the client name and inputs." };
   }
 
-  const config = await getActiveConfig();
+  const config = await getActiveConfig(db, tenant);
   if (!config) return { error: "No published pricing version — ask an administrator to publish one." };
 
   const { clientName, notes, requestedTier, inputs } = parsed.data;
@@ -59,8 +59,9 @@ export async function submitForReview(_prev: SubmitState, formData: FormData): P
   }
 
   const tier = requestedTier === "PINNACLE" ? result.pinnacle : result.advantage;
-  const quote = await prisma.quoteRequest.create({
+  const quote = await db.quoteRequest.create({
     data: {
+      tenantId: tenant.id,
       ref: newRef(),
       clientName,
       notes: notes || null,
@@ -71,6 +72,7 @@ export async function submitForReview(_prev: SubmitState, formData: FormData): P
       perUserFloor: inputs.perUserFloor,
       floorOverride: inputs.floorOverride,
       addonMultiplier: inputs.addonMultiplier,
+      markupMultiple: inputs.markupMultiple,
       bundleKey: inputs.bundleKey,
       requestedTier,
       advantageRate: result.advantage.headlineRate.toFixed(2),
@@ -80,9 +82,10 @@ export async function submitForReview(_prev: SubmitState, formData: FormData): P
       triggers: result.triggers.map((t) => t.code),
       pricingVersionId: config.versionId,
       submittedById: user.id,
-      purgeAfter: purgeDate(),
+      purgeAfter: purgeDate(tenant.retentionMonths),
       reviews: {
         create: {
+          tenantId: tenant.id,
           action: "SUBMITTED",
           comment: notes || null,
           actorId: user.id,
@@ -101,21 +104,23 @@ export async function submitForReview(_prev: SubmitState, formData: FormData): P
       triggers: result.triggers.map((t) => t.code),
       pricingVersion: config.versionLabel,
     },
+    tenantId: tenant.id,
     actor: user,
   });
 
-  const reviewers = await prisma.user.findMany({
-    where: { active: true, role: { in: ["LEADER", "ADMIN"] } },
-    select: { email: true },
+  // Reviewers are the people with a reviewing role *in this workspace*.
+  const reviewers = await db.membership.findMany({
+    where: { role: { in: ["LEADER", "ADMIN"] }, user: { active: true } },
+    select: { user: { select: { email: true } } },
   });
   if (reviewers.length) {
     await sendMail({
-      to: reviewers.map((r) => r.email),
-      subject: `[Approval needed] ${quote.ref} · ${clientName}`,
+      to: reviewers.map((r) => r.user.email),
+      subject: `[${tenant.name}] Approval needed · ${quote.ref} · ${clientName}`,
       heading: "Non-standard pricing needs your review",
       lines: [
         `${user.name} submitted ${clientName} for review.`,
-        `Requested tier: ${requestedTier === "PINNACLE" ? "infinIT Pinnacle" : "infinIT Advantage"}`,
+        `Requested tier: ${tierName(tenant, requestedTier)}`,
         `Rate: $${tier.headlineRate.toFixed(0)}/month ($${tier.headlinePerUser.toFixed(2)}/user)`,
         `Environment: ${inputs.users} users · ${inputs.devices} devices · ${inputs.locations} locations`,
         ...result.triggers.map((t) => `Flag: ${t.message}`),

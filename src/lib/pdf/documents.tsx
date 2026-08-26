@@ -17,12 +17,20 @@ export interface StampInfo {
 
 export type DocType = "QUOTE" | "COGS";
 
+/** Everything a workspace controls about how its documents read. */
+export interface DocWorkspace {
+  name: string;
+  tierLabels: Record<Tier, string>;
+  footer?: string | null;
+}
+
 export interface DocProps {
   result: CalcResult;
   tier: Tier;
   clientName: string;
   notes?: string | null;
   stamp: StampInfo;
+  workspace: DocWorkspace;
   logo?: Buffer;
 }
 
@@ -41,18 +49,20 @@ function Header({
   stamp,
   clientName,
   title,
+  workspaceName,
   logo,
 }: {
   stamp: StampInfo;
   clientName: string;
   title: string;
+  workspaceName: string;
   logo?: Buffer;
 }) {
   return (
     <View style={styles.headerRow}>
       <View>
         {/* eslint-disable-next-line jsx-a11y/alt-text -- react-pdf Image has no alt prop */}
-        {logo ? <Image style={styles.logo} src={logo} /> : <Text style={styles.title}>infinIT</Text>}
+        {logo ? <Image style={styles.logo} src={logo} /> : <Text style={styles.title}>{workspaceName}</Text>}
         <Text style={styles.eyebrow}>{title.toUpperCase()}</Text>
         <Text style={styles.title}>{clientName}</Text>
       </View>
@@ -66,7 +76,15 @@ function Header({
   );
 }
 
-function Stamp({ stamp, checksum }: { stamp: StampInfo; checksum?: string }) {
+function Stamp({
+  stamp,
+  workspace,
+  checksum,
+}: {
+  stamp: StampInfo;
+  workspace: DocWorkspace;
+  checksum?: string;
+}) {
   return (
     <View style={styles.stamp} fixed>
       <Text>
@@ -76,8 +94,8 @@ function Stamp({ stamp, checksum }: { stamp: StampInfo; checksum?: string }) {
         {checksum ? ` · sha256 ${checksum.slice(0, 16)}` : ""}
       </Text>
       <Text>
-        Verify this document against the InfinIT Agreement Calculator export log. Rates are valid for the
-        pricing version shown; quarterly true-up recommended.
+        {workspace.footer ??
+          `Verify this document against the ${workspace.name} Agreement Calculator export log. Rates are valid for the pricing version shown; quarterly true-up recommended.`}
       </Text>
     </View>
   );
@@ -107,25 +125,31 @@ export function buildDocument(docType: DocType, props: DocProps): ReactElement<D
   return element as unknown as ReactElement<DocumentProps>;
 }
 
-export function QuoteDocument({ result, tier, clientName, notes, stamp, logo }: DocProps) {
+export function QuoteDocument({ result, tier, clientName, notes, stamp, workspace, logo }: DocProps) {
   const t = tier === "PINNACLE" ? result.pinnacle : result.advantage;
   const other = tier === "PINNACLE" ? result.advantage : result.pinnacle;
-  const tierName = tier === "PINNACLE" ? "infinIT Pinnacle" : "infinIT Advantage";
-  const otherName = tier === "PINNACLE" ? "infinIT Advantage" : "infinIT Pinnacle";
+  const tierName = workspace.tierLabels[tier];
+  const otherName = workspace.tierLabels[tier === "PINNACLE" ? "ADVANTAGE" : "PINNACLE"];
   const pending = stamp.approvalState !== "APPROVED" && stamp.approvalState !== "STANDARD";
 
   return (
     <Document
       title={`${clientName} — ${tierName} agreement`}
-      author="infinIT Managed Services"
+      author={workspace.name}
       subject={`Agreement summary · pricing version ${stamp.pricingVersion}`}
-      creator={`InfinIT Agreement Calculator ${stamp.appVersion}`}
-      producer={`InfinIT Agreement Calculator ${stamp.appVersion}`}
+      creator={`Agreement Calculator ${stamp.appVersion}`}
+      producer={`Agreement Calculator ${stamp.appVersion}`}
       keywords={`export:${stamp.exportId} pricing:${stamp.pricingVersion} approval:${stamp.approvalState}`}
     >
       <Page size="LETTER" style={styles.page}>
         {pending ? <Text style={styles.watermark}>PENDING APPROVAL</Text> : null}
-        <Header stamp={stamp} clientName={clientName} title="Managed services agreement" logo={logo} />
+        <Header
+          stamp={stamp}
+          clientName={clientName}
+          title="Managed services agreement"
+          workspaceName={workspace.name}
+          logo={logo}
+        />
         <Text style={styles.confidential}>PROPOSED MONTHLY INVESTMENT · {tierName.toUpperCase()}</Text>
 
         <MetaGrid result={result} />
@@ -145,9 +169,9 @@ export function QuoteDocument({ result, tier, clientName, notes, stamp, logo }: 
           {tier === "PINNACLE" ? (
             <>
               <Text>
-                Everything in infinIT Advantage — 24/7 monitoring and remediation, patching, endpoint
-                protection, email security, vulnerability management, network monitoring, and unlimited
-                remote support — plus the Pinnacle security stack:
+                Everything in {workspace.tierLabels.ADVANTAGE} — 24/7 monitoring and remediation, patching,
+                endpoint protection, email security, vulnerability management, network monitoring, and
+                unlimited remote support — plus the {workspace.tierLabels.PINNACLE} security stack:
               </Text>
               <View style={{ marginTop: 6 }}>
                 {result.pinnacle.lines.map((l) => (
@@ -205,28 +229,34 @@ export function QuoteDocument({ result, tier, clientName, notes, stamp, logo }: 
           </Text>
         </View>
 
-        <Stamp stamp={stamp} />
+        <Stamp stamp={stamp} workspace={workspace} />
       </Page>
     </Document>
   );
 }
 
-export function CogsDocument({ result, tier, clientName, notes, stamp, logo }: DocProps) {
+export function CogsDocument({ result, tier, clientName, notes, stamp, workspace, logo }: DocProps) {
   const t = tier === "PINNACLE" ? result.pinnacle : result.advantage;
-  const tierName = tier === "PINNACLE" ? "infinIT Pinnacle" : "infinIT Advantage";
+  const tierName = workspace.tierLabels[tier];
   const lines = tier === "PINNACLE" ? [...result.advantage.lines, ...result.pinnacle.lines] : result.advantage.lines;
 
   return (
     <Document
       title={`${clientName} — internal COGS worksheet`}
-      author="infinIT Managed Services"
+      author={workspace.name}
       subject={`Internal COGS worksheet · pricing version ${stamp.pricingVersion}`}
-      creator={`InfinIT Agreement Calculator ${stamp.appVersion}`}
-      producer={`InfinIT Agreement Calculator ${stamp.appVersion}`}
+      creator={`Agreement Calculator ${stamp.appVersion}`}
+      producer={`Agreement Calculator ${stamp.appVersion}`}
       keywords={`export:${stamp.exportId} pricing:${stamp.pricingVersion} approval:${stamp.approvalState}`}
     >
       <Page size="LETTER" style={styles.page}>
-        <Header stamp={stamp} clientName={clientName} title="Internal COGS worksheet" logo={logo} />
+        <Header
+          stamp={stamp}
+          clientName={clientName}
+          title="Internal COGS worksheet"
+          workspaceName={workspace.name}
+          logo={logo}
+        />
         <Text style={styles.confidential}>
           INTERNAL ONLY · DO NOT SEND TO CLIENT · CONTAINS TOOL COST AND MARGIN
         </Text>
@@ -247,7 +277,7 @@ export function CogsDocument({ result, tier, clientName, notes, stamp, logo }: D
               <View key={`${l.tier}-${l.key}`} style={styles.td}>
                 <Text style={{ width: "38%" }}>
                   {l.label}
-                  {l.tier === "PINNACLE" ? " (Pinnacle add-on)" : ""}
+                  {l.tier === "PINNACLE" ? ` (${workspace.tierLabels.PINNACLE} add-on)` : ""}
                 </Text>
                 <Text style={{ width: "20%", color: brand.slate }}>{UNIT_LABEL[l.unit]}</Text>
                 <Text style={{ width: "14%", textAlign: "right" }}>{money(l.unitCost)}</Text>
@@ -331,7 +361,7 @@ export function CogsDocument({ result, tier, clientName, notes, stamp, logo }: D
           </View>
         ) : null}
 
-        <Stamp stamp={stamp} />
+        <Stamp stamp={stamp} workspace={workspace} />
       </Page>
     </Document>
   );

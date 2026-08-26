@@ -3,7 +3,6 @@
 import { useActionState, useMemo, useState } from "react";
 import clsx from "clsx";
 import {
-  calculate,
   money,
   moneyRounded,
   type CalcInputs,
@@ -11,6 +10,7 @@ import {
   type Tier,
   type TierResult,
 } from "@/lib/pricing/engine";
+import { calculate } from "@/lib/pricing/models";
 import { submitForReview, type SubmitState } from "./actions";
 import { downloadExport } from "@/lib/export-client";
 
@@ -97,34 +97,68 @@ export function CalculatorClient({
           <section className="card">
             <h2 className="text-[18px]">Pricing levers</h2>
             <div className="mt-4 space-y-5">
-              <div>
-                <div className="flex items-baseline justify-between">
-                  <label className="label" htmlFor="sgm">
-                    Service gross margin
-                  </label>
-                  <span
-                    className={clsx(
-                      "font-display text-[18px] font-bold",
-                      inputs.sgmPct === config.defaultSgmPct ? "text-navy" : "text-orange",
-                    )}
-                  >
-                    {inputs.sgmPct}%
-                  </span>
+              {config.model === "COST_PLUS" ? (
+                <div>
+                  <div className="flex items-baseline justify-between">
+                    <label className="label" htmlFor="sgm">
+                      Service gross margin
+                    </label>
+                    <span
+                      className={clsx(
+                        "font-display text-[18px] font-bold",
+                        inputs.sgmPct === config.settings.defaultSgmPct ? "text-navy" : "text-orange",
+                      )}
+                    >
+                      {inputs.sgmPct}%
+                    </span>
+                  </div>
+                  <input
+                    id="sgm"
+                    type="range"
+                    min={0}
+                    max={config.settings.maxSgmPct}
+                    step={1}
+                    value={inputs.sgmPct}
+                    onChange={(e) => set("sgmPct", Number(e.target.value))}
+                    className="mt-2 w-full"
+                  />
+                  <p className="mt-1 text-[12px] text-slate">
+                    Default {config.settings.defaultSgmPct}% · derived multiplier{" "}
+                    {result.multiplier.toFixed(2)}×
+                  </p>
                 </div>
-                <input
-                  id="sgm"
-                  type="range"
-                  min={0}
-                  max={config.maxSgmPct}
-                  step={1}
-                  value={inputs.sgmPct}
-                  onChange={(e) => set("sgmPct", Number(e.target.value))}
-                  className="mt-2 w-full"
-                />
-                <p className="mt-1 text-[12px] text-slate">
-                  Default {config.defaultSgmPct}% · derived multiplier {result.multiplier.toFixed(2)}×
-                </p>
-              </div>
+              ) : (
+                <div>
+                  <div className="flex items-baseline justify-between">
+                    <label className="label" htmlFor="markup">
+                      Markup on tool cost
+                    </label>
+                    <span
+                      className={clsx(
+                        "font-display text-[18px] font-bold",
+                        inputs.markupMultiple === config.settings.defaultMarkup
+                          ? "text-navy"
+                          : "text-orange",
+                      )}
+                    >
+                      {inputs.markupMultiple.toFixed(2)}×
+                    </span>
+                  </div>
+                  <input
+                    id="markup"
+                    type="range"
+                    min={1}
+                    max={Math.max(config.settings.defaultMarkup * 2, 8)}
+                    step={0.05}
+                    value={inputs.markupMultiple}
+                    onChange={(e) => set("markupMultiple", Number(e.target.value))}
+                    className="mt-2 w-full"
+                  />
+                  <p className="mt-1 text-[12px] text-slate">
+                    Default {config.settings.defaultMarkup}× · review below {config.settings.minMarkup}×
+                  </p>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -140,13 +174,13 @@ export function CalculatorClient({
                     onChange={(e) => set("perUserFloor", Number(e.target.value))}
                     className={clsx(
                       "field mt-1",
-                      inputs.perUserFloor !== config.minPerUserFloor && "field-alert",
+                      inputs.perUserFloor !== config.settings.minPerUserFloor && "field-alert",
                     )}
                   />
                 </div>
                 <div>
                   <label className="label" htmlFor="addon">
-                    Add-on multiplier
+                    Add-on {config.model === "COST_PLUS" ? "multiplier" : "markup"}
                   </label>
                   <input
                     id="addon"
@@ -155,9 +189,12 @@ export function CalculatorClient({
                     step={0.01}
                     value={inputs.addonMultiplier}
                     onChange={(e) => set("addonMultiplier", Number(e.target.value))}
+                    disabled={config.model !== "COST_PLUS"}
                     className={clsx(
                       "field mt-1",
-                      inputs.addonMultiplier !== config.addonMultiplier && "field-alert",
+                      config.model === "COST_PLUS" &&
+                        inputs.addonMultiplier !== config.settings.addonMultiplier &&
+                        "field-alert",
                     )}
                   />
                 </div>
@@ -248,25 +285,25 @@ export function CalculatorClient({
 
           <div className="grid gap-4 md:grid-cols-2">
             <TierCard
-              name="infinIT Advantage"
+              name={config.tierLabels.ADVANTAGE}
               blurb="Core managed services"
               tierResult={result.advantage}
               selected={tier === "ADVANTAGE"}
               onSelect={() => setTier("ADVANTAGE")}
             />
             <TierCard
-              name="infinIT Pinnacle"
-              blurb="Advantage plus the security stack"
+              name={config.tierLabels.PINNACLE}
+              blurb={`${config.tierLabels.ADVANTAGE} plus the security stack`}
               tierResult={result.pinnacle}
               selected={tier === "PINNACLE"}
               onSelect={() => setTier("PINNACLE")}
-              footnote={`+${moneyRounded(result.delta.discountedRate)}/mo over Advantage`}
+              footnote={`+${moneyRounded(result.delta.discountedRate)}/mo over ${config.tierLabels.ADVANTAGE}`}
             />
           </div>
 
           <section className="card">
             <div className="flex items-center justify-between">
-              <h2 className="text-[18px]">Cost build — {tier === "PINNACLE" ? "Pinnacle" : "Advantage"}</h2>
+              <h2 className="text-[18px]">Cost build — {config.tierLabels[tier]}</h2>
               <button type="button" className="btn-ghost btn-sm" onClick={() => setShowCosts((v) => !v)}>
                 {showCosts ? "Hide costs" : "Show costs"}
               </button>
@@ -307,14 +344,20 @@ export function CalculatorClient({
 
                 <dl className="mt-4 space-y-2 text-[14px]">
                   <Line label="Monthly tool cost" value={money(selected.toolCost)} />
-                  <Line
-                    label={`Imputed labor (${config.laborMultiplier}× tool)`}
-                    value={money(selected.costFloor - selected.toolCost)}
-                    muted
-                  />
+                  {config.model === "COST_PLUS" ? (
+                    <Line
+                      label={`Imputed labor (${config.settings.laborMultiplier}× tool)`}
+                      value={money(selected.costFloor - selected.toolCost)}
+                      muted
+                    />
+                  ) : null}
                   <Line label="Hard cost floor" value={money(selected.costFloor)} strong />
                   <Line
-                    label={`Standard rate at ${result.split.sgmPct}% SGM`}
+                    label={
+                      config.model === "COST_PLUS"
+                        ? `Standard rate at ${result.split.sgmPct}% SGM`
+                        : `Standard rate at ${result.multiplier.toFixed(2)}× tool cost`
+                    }
                     value={money(selected.standardRate)}
                   />
                   {selected.discount > 0 ? (
@@ -336,9 +379,11 @@ export function CalculatorClient({
                   <span className="bg-navy py-2" style={{ width: `${result.split.toolPct}%` }}>
                     Tool {result.split.toolPct}%
                   </span>
-                  <span className="bg-slate py-2" style={{ width: `${result.split.laborPct}%` }}>
-                    Labor {result.split.laborPct}%
-                  </span>
+                  {result.split.laborPct > 0 ? (
+                    <span className="bg-slate py-2" style={{ width: `${result.split.laborPct}%` }}>
+                      Labor {result.split.laborPct}%
+                    </span>
+                  ) : null}
                   <span className="bg-orange py-2" style={{ width: `${result.split.sgmPct}%` }}>
                     GM {result.split.sgmPct}%
                   </span>
@@ -400,6 +445,7 @@ export function CalculatorClient({
                   <input type="hidden" name="perUserFloor" value={inputs.perUserFloor} />
                   <input type="hidden" name="floorOverride" value={String(inputs.floorOverride)} />
                   <input type="hidden" name="addonMultiplier" value={inputs.addonMultiplier} />
+                  <input type="hidden" name="markupMultiple" value={inputs.markupMultiple} />
                   <input type="hidden" name="bundleKey" value={inputs.bundleKey} />
                   <button type="submit" className="btn-primary" disabled={submitting}>
                     {submitting ? "Submitting…" : "Submit for leadership review"}

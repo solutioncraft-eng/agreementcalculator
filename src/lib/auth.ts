@@ -2,17 +2,33 @@ import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { SignJWT, jwtVerify } from "jose";
 import bcrypt from "bcryptjs";
-import type { Role } from "@prisma/client";
-import { prisma } from "@/lib/db";
+import type { Role, Tenant } from "@prisma/client";
+import { prisma, tenantDb, type TenantDb } from "@/lib/db";
+import { slugFromHost } from "@/lib/tenant";
 
-const COOKIE = "infinit_session";
+const COOKIE = "ac_session";
 const MAX_AGE_SECONDS = 60 * 60 * 10; // a working day
 
-export interface SessionUser {
+/**
+ * An account is global and identified by email; a role is not. The signed
+ * cookie therefore carries only the account and which workspace the person is
+ * currently looking at — the role is re-read from that workspace's membership
+ * on every request, so revoking access takes effect immediately and a stale
+ * cookie can never carry a role the person no longer holds.
+ */
+export interface SessionAccount {
   id: string;
   email: string;
   name: string;
+  isSuperAdmin: boolean;
+}
+
+export interface TenantSession {
+  user: SessionAccount;
+  tenant: Tenant;
   role: Role;
+  /** Prisma locked to this tenant. Use it for every tenant-owned query. */
+  db: TenantDb;
 }
 
 function secret(): Uint8Array {
@@ -31,10 +47,10 @@ export async function verifyPassword(plain: string, hash: string): Promise<boole
   return bcrypt.compare(plain, hash);
 }
 
-export async function createSession(user: SessionUser): Promise<void> {
-  const token = await new SignJWT({ email: user.email, name: user.name, role: user.role })
+export async function createSession(userId: string, tenantId: string | null): Promise<void> {
+  const token = await new SignJWT({ tid: tenantId })
     .setProtectedHeader({ alg: "HS256" })
-    .setSubject(user.id)
+    .setSubject(userId)
     .setIssuedAt()
     .setExpirationTime(`${MAX_AGE_SECONDS}s`)
     .sign(secret());
@@ -54,46 +70,123 @@ export async function destroySession(): Promise<void> {
   store.delete(COOKIE);
 }
 
-/** Reads the signed session cookie. Returns null when absent or invalid. */
-export async function getSession(): Promise<SessionUser | null> {
+interface RawSession {
+  userId: string;
+  tenantId: string | null;
+}
+
+async function readCookie(): Promise<RawSession | null> {
   const store = await cookies();
   const token = store.get(COOKIE)?.value;
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, secret());
     if (!payload.sub) return null;
-    return {
-      id: payload.sub,
-      email: String(payload.email),
-      name: String(payload.name),
-      role: payload.role as Role,
-    };
+    return { userId: payload.sub, tenantId: typeof payload.tid === "string" ? payload.tid : null };
   } catch {
     return null;
   }
 }
 
-/** Session plus a check that the account is still active. */
-export async function getCurrentUser(): Promise<SessionUser | null> {
-  const session = await getSession();
+/** The signed-in account, or null. Says nothing about workspace access. */
+export async function getCurrentUser(): Promise<SessionAccount | null> {
+  const session = await readCookie();
   if (!session) return null;
   const user = await prisma.user.findUnique({
-    where: { id: session.id },
-    select: { id: true, email: true, name: true, role: true, active: true },
+    where: { id: session.userId },
+    select: { id: true, email: true, name: true, isSuperAdmin: true, active: true },
   });
   if (!user || !user.active) return null;
-  return { id: user.id, email: user.email, name: user.name, role: user.role };
+  return { id: user.id, email: user.email, name: user.name, isSuperAdmin: user.isSuperAdmin };
 }
 
-export async function requireUser(): Promise<SessionUser> {
+export async function requireUser(): Promise<SessionAccount> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   return user;
 }
 
-export async function requireRole(...roles: Role[]): Promise<SessionUser> {
+export interface MembershipSummary {
+  tenantId: string;
+  slug: string;
+  name: string;
+  role: Role;
+}
+
+/** Workspaces the account can open, in display order. */
+export async function membershipsFor(userId: string): Promise<MembershipSummary[]> {
+  const rows = await prisma.membership.findMany({
+    where: { userId, tenant: { status: { not: "SUSPENDED" } } },
+    select: { tenantId: true, role: true, tenant: { select: { slug: true, name: true } } },
+    orderBy: { tenant: { name: "asc" } },
+  });
+  return rows.map((m) => ({
+    tenantId: m.tenantId,
+    slug: m.tenant.slug,
+    name: m.tenant.name,
+    role: m.role,
+  }));
+}
+
+/**
+ * Resolves the workspace for this request.
+ *
+ * The hostname wins when the request arrives on a tenant subdomain, so a link
+ * into `acme.agreementcalculator.com` always lands in Acme regardless of which
+ * workspace the cookie last selected; otherwise the cookie decides. Either way
+ * the membership is looked up before anything is served, so an account without
+ * one gets nothing.
+ */
+export async function getTenantSession(): Promise<TenantSession | null> {
+  const user = await getCurrentUser();
+  if (!user) return null;
+
+  const hostSlug = await slugFromHost();
+  const session = await readCookie();
+
+  const membership = await prisma.membership.findFirst({
+    where: {
+      userId: user.id,
+      tenant: hostSlug
+        ? { slug: hostSlug, status: { not: "SUSPENDED" } }
+        : { id: session?.tenantId ?? undefined, status: { not: "SUSPENDED" } },
+    },
+    include: { tenant: true },
+  });
+  if (!membership) return null;
+
+  return {
+    user,
+    tenant: membership.tenant,
+    role: membership.role,
+    db: tenantDb(membership.tenantId),
+  };
+}
+
+/**
+ * Sends the caller somewhere sensible when they have no workspace open: the
+ * picker if they belong to any, otherwise a dead end explaining as much.
+ */
+export async function requireTenant(): Promise<TenantSession> {
+  const session = await getTenantSession();
+  if (session) return session;
+
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const memberships = await membershipsFor(user.id);
+  redirect(memberships.length > 0 ? "/workspaces" : "/no-workspace");
+}
+
+export async function requireRole(...roles: Role[]): Promise<TenantSession> {
+  const session = await requireTenant();
+  if (!roles.includes(session.role)) redirect("/calculator?denied=1");
+  return session;
+}
+
+/** The product-level portal. Deliberately separate from tenant sessions. */
+export async function requireSuperAdmin(): Promise<SessionAccount> {
   const user = await requireUser();
-  if (!roles.includes(user.role)) redirect("/calculator?denied=1");
+  if (!user.isSuperAdmin) redirect("/calculator?denied=1");
   return user;
 }
 
