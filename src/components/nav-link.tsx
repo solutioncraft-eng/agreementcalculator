@@ -20,7 +20,7 @@ export function NavLink({
     <Link
       href={href}
       className={clsx(
-        "rounded-brand px-3 py-2 text-[14px] font-medium transition",
+        "shrink-0 whitespace-nowrap rounded-brand px-3 py-2 text-[14px] font-medium transition",
         active ? "bg-navy text-white" : "text-slate hover:bg-mist hover:text-navy",
       )}
     >

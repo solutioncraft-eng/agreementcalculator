@@ -76,6 +76,17 @@
   .stat {
     @apply font-display text-navy tabular-nums;
   }
+
+  /* Horizontally scrollable nav row for narrow screens, without a visible
+     scrollbar eating into the 44px touch target. */
+  .nav-row {
+    @apply overflow-x-auto;
+    scrollbar-width: none;
+  }
+
+  .nav-row::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 /* Range inputs: orange thumb on a mist track, flat per the style guide. */
