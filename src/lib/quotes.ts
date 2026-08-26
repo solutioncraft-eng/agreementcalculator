@@ -9,12 +9,17 @@ export const STATUS_LABEL: Record<QuoteStatus, string> = {
   WITHDRAWN: "Withdrawn",
 };
 
+/**
+ * Review-queue badge colours from the style guide. They are fixed rather than
+ * accent-derived: a workspace may repaint the accent, but "needs approval" has
+ * to look like a flag everywhere.
+ */
 export const STATUS_CLASS: Record<QuoteStatus, string> = {
-  PENDING: "bg-orange-tint/25 text-orange-dark",
-  APPROVED: "bg-navy text-white",
-  CHANGES_REQUESTED: "bg-orange text-white",
+  PENDING: "bg-status-alert text-status-alert-fg",
+  APPROVED: "bg-status-approved text-status-approved-fg",
+  CHANGES_REQUESTED: "bg-status-changes text-status-changes-fg",
   DENIED: "bg-ink text-white",
-  WITHDRAWN: "bg-mist text-slate",
+  WITHDRAWN: "bg-status-draft text-status-draft-fg",
 };
 
 export const TRIGGER_LABEL: Record<string, string> = {

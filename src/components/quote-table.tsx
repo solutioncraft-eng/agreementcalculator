@@ -38,7 +38,7 @@ export function QuoteTable({
               quote.requestedTier === "PINNACLE" ? quote.pinnacleRate : quote.advantageRate
             ).toNumber();
             return (
-              <tr key={quote.id} className="border-b border-mist last:border-0 hover:bg-paper">
+              <tr key={quote.id} className="border-b border-steel last:border-0 hover:bg-paper">
                 <td className="px-5 py-3 font-mono text-[12px]">
                   <Link href={`${hrefBase}/${quote.id}`} className="font-semibold text-orange">
                     {quote.ref}

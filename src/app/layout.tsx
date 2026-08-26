@@ -24,7 +24,6 @@ export const metadata: Metadata = {
   title: "Agreement Calculator",
   description: "Managed services agreement pricing, review and approval",
   robots: { index: false, follow: false },
-  icons: { icon: "/favicon-192.png" },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

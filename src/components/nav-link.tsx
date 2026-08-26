@@ -26,12 +26,7 @@ export function NavLink({
     >
       {children}
       {badge ? (
-        <span
-          className={clsx(
-            "ml-2 rounded-brand px-[6px] py-[1px] font-display text-[11px] font-bold",
-            active ? "bg-orange text-white" : "bg-orange text-white",
-          )}
-        >
+        <span className="ml-2 rounded-brand bg-orange px-[6px] py-[1px] font-display text-[11px] font-bold text-orange-contrast">
           {badge}
         </span>
       ) : null}

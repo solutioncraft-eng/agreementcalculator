@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { slugFromHost } from "@/lib/tenant";
 import { TRIAL_DAYS } from "@/lib/trial";
+import { Logo, LogoMark } from "@/components/logo";
 import { LoginForm } from "./login-form";
 
 export default async function LoginPage() {
@@ -14,7 +15,11 @@ export default async function LoginPage() {
   return (
     <main className="flex min-h-screen">
       <section className="hidden flex-1 flex-col justify-between bg-navy p-12 text-white lg:flex">
-        <p className="font-display text-[20px] font-bold uppercase tracking-eyebrow">Agreement Calculator</p>
+        <Logo
+          variant="current"
+          markClassName="h-7 w-7"
+          wordmarkClassName="text-white text-[20px] uppercase tracking-eyebrow"
+        />
         <div>
           <p className="eyebrow">Managed services pricing</p>
           <h1 className="mt-3 max-w-md text-[40px] leading-[44px] text-white">
@@ -31,7 +36,10 @@ export default async function LoginPage() {
       <section className="flex flex-1 items-center justify-center p-8">
         <div className="w-full max-w-[380px]">
           <p className="eyebrow">Sign in</p>
-          <h2 className="mt-2 text-[30px] leading-9">Agreement Calculator</h2>
+          <h2 className="mt-2 flex items-center gap-3 text-[30px] leading-9">
+            <LogoMark className="h-8 w-8" />
+            Agreement Calculator
+          </h2>
           <p className="mt-2 text-slate">Accounts are provisioned by your workspace administrator.</p>
           <LoginForm />
           {onWorkspaceHost ? null : (

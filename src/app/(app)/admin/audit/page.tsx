@@ -69,7 +69,7 @@ export default async function AuditPage({
           </thead>
           <tbody>
             {events.map((event) => (
-              <tr key={event.id} className="border-b border-mist last:border-0">
+              <tr key={event.id} className="border-b border-steel last:border-0">
                 <td className="whitespace-nowrap px-5 py-2 font-mono text-[11px] text-slate">
                   {formatUtc(event.createdAt)}
                 </td>
@@ -123,7 +123,7 @@ export default async function AuditPage({
             </thead>
             <tbody>
               {exports.map((record) => (
-                <tr key={record.id} className="border-b border-mist last:border-0">
+                <tr key={record.id} className="border-b border-steel last:border-0">
                   <td className="px-5 py-2 font-mono text-[11px] font-medium text-navy">{record.exportId}</td>
                   <td className="px-5 py-2">{record.docType}</td>
                   <td className="px-5 py-2">{record.clientName ?? "—"}</td>

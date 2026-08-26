@@ -8,6 +8,9 @@
     --accent-rgb: 242 107 33;
     --accent-tint-rgb: 251 169 76;
     --accent-dark-rgb: 217 90 20;
+    /* White clears AA on the house orange; AppLayout swaps it for navy when a
+       workspace picks a pale accent. */
+    --accent-contrast-rgb: 255 255 255;
   }
 
   body {
@@ -39,7 +42,7 @@
   }
 
   .field {
-    @apply w-full rounded-brand border border-mist bg-white px-3 py-2 text-[15px] text-ink outline-none transition focus:border-navy;
+    @apply w-full rounded-brand border border-steel bg-white px-3 py-2 text-[15px] text-ink outline-none transition focus:border-navy;
   }
 
   .field-alert {
@@ -55,7 +58,7 @@
   }
 
   .btn-primary {
-    @apply btn bg-orange text-white hover:bg-orange-dark;
+    @apply btn bg-orange text-orange-contrast hover:bg-orange-dark;
   }
 
   .btn-navy {

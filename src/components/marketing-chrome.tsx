@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Logo, LogoMark } from "@/components/logo";
 import { PRICE_PER_MONTH, TRIAL_DAYS } from "@/lib/trial";
 
 /** Header and footer shared by the landing page and the signup form. */
@@ -6,8 +7,8 @@ export function MarketingHeader({ cta = true }: { cta?: boolean }) {
   return (
     <header className="border-b border-mist bg-white">
       <div className="mx-auto flex max-w-content items-center justify-between gap-6 px-6 py-4 md:px-10">
-        <Link href="/" className="font-display text-[15px] font-bold uppercase tracking-eyebrow text-navy">
-          Agreement Calculator
+        <Link href="/">
+          <Logo />
         </Link>
         <nav className="flex items-center gap-6 text-[14px]">
           <Link href="#how" className="hidden text-slate hover:text-navy sm:block">
@@ -34,7 +35,8 @@ export function MarketingFooter() {
   return (
     <footer className="border-t border-mist bg-white">
       <div className="mx-auto flex max-w-content flex-wrap items-center justify-between gap-4 px-6 py-8 text-[13px] text-slate md:px-10">
-        <p>
+        <p className="flex items-center gap-2">
+          <LogoMark variant="navy" className="h-4 w-4" />
           Agreement Calculator · ${PRICE_PER_MONTH}/month per company · {TRIAL_DAYS}-day free trial, no card
           required
         </p>

@@ -21,12 +21,28 @@ test("an accent colour repaints the accent channels", () => {
     "--accent-rgb": "51 102 204",
     "--accent-dark-rgb": "43 87 173",
     "--accent-tint-rgb": "122 156 222",
+    "--accent-contrast-rgb": "255 255 255",
   });
   assert.deepEqual(accentStyle("#fff"), {
     "--accent-rgb": "255 255 255",
     "--accent-dark-rgb": "217 217 217",
     "--accent-tint-rgb": "255 255 255",
+    "--accent-contrast-rgb": "18 37 58",
   });
+});
+
+test("text on an accent surface stays legible whatever the workspace picks", () => {
+  const contrastOf = (accent: string) =>
+    (accentStyle(accent) as Record<string, string> | undefined)?.["--accent-contrast-rgb"];
+  const white = "255 255 255";
+  const navy = "18 37 58";
+
+  // The house orange and other mid-to-dark accents carry white.
+  assert.equal(contrastOf("#F26B21"), white);
+  assert.equal(contrastOf("#12253A"), white);
+  // Pale accents would leave white text unreadable, so navy takes over.
+  assert.equal(contrastOf("#FFD166"), navy);
+  assert.equal(contrastOf("#9AE6B4"), navy);
 });
 
 test("an absent or malformed accent leaves the house colour alone", () => {
