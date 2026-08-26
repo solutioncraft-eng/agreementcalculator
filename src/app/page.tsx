@@ -59,7 +59,8 @@ export default async function Home() {
         <section className="bg-navy">
           <div className="mx-auto max-w-content px-6 py-20 md:px-10 md:py-28">
             <p className="eyebrow flex items-center gap-3">
-              <LogoMark className="h-5 w-5" />
+              {/* Single-colour on the navy hero: the primary lockup's navy quadrant would vanish. */}
+              <LogoMark variant="current" className="h-5 w-5" />
               Agreement pricing for MSPs
             </p>
             <h1 className="mt-4 max-w-3xl text-[44px] leading-[48px] text-white md:text-[56px] md:leading-[60px]">
