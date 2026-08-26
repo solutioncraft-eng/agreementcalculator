@@ -60,6 +60,9 @@ export function TenantRow({ tenant, models }: { tenant: Row; models: PricingMode
             </label>
             <select
               id={`model-${tenant.id}`}
+              // Remount when the workspace's model changes so the uncontrolled
+              // select does not keep showing the pre-action value.
+              key={tenant.pricingModel}
               name="pricingModel"
               defaultValue={tenant.pricingModel}
               className="field w-auto py-[10px] text-[13px]"
