@@ -3,7 +3,7 @@
 import { useActionState } from "react";
 import clsx from "clsx";
 import type { TenantStatus } from "@prisma/client";
-import { setTenantStatus, type SuperState } from "./actions";
+import { setPricingModel, setTenantStatus, type SuperState } from "./actions";
 
 interface Row {
   id: string;
@@ -20,14 +20,23 @@ interface Row {
   lastActivity: string | null;
 }
 
+export interface PricingModelOption {
+  key: string;
+  label: string;
+}
+
 const STATUS_CLASS: Record<TenantStatus, string> = {
   TRIAL: "bg-orange-tint/25 text-orange-dark",
   ACTIVE: "bg-navy text-white",
   SUSPENDED: "bg-ink text-white",
 };
 
-export function TenantRow({ tenant }: { tenant: Row }) {
+export function TenantRow({ tenant, models }: { tenant: Row; models: PricingModelOption[] }) {
   const [state, action, pending] = useActionState<SuperState, FormData>(setTenantStatus, {});
+  const [modelState, modelAction, modelPending] = useActionState<SuperState, FormData>(
+    setPricingModel,
+    {},
+  );
   const suspended = tenant.status === "SUSPENDED";
 
   return (
@@ -44,6 +53,27 @@ export function TenantRow({ tenant }: { tenant: Row }) {
         </div>
 
         <div className="flex items-center gap-2">
+          <form action={modelAction} className="flex items-center gap-2">
+            <input type="hidden" name="tenantId" value={tenant.id} />
+            <label className="sr-only" htmlFor={`model-${tenant.id}`}>
+              Pricing model
+            </label>
+            <select
+              id={`model-${tenant.id}`}
+              name="pricingModel"
+              defaultValue={tenant.pricingModel}
+              className="field w-auto py-[10px] text-[13px]"
+            >
+              {models.map((model) => (
+                <option key={model.key} value={model.key}>
+                  {model.label}
+                </option>
+              ))}
+            </select>
+            <button type="submit" className="btn-ghost btn-sm" disabled={modelPending}>
+              Change model
+            </button>
+          </form>
           <form action={action}>
             <input type="hidden" name="tenantId" value={tenant.id} />
             <input type="hidden" name="status" value={suspended ? "ACTIVE" : "SUSPENDED"} />
@@ -71,8 +101,12 @@ export function TenantRow({ tenant }: { tenant: Row }) {
         ))}
       </dl>
 
-      {state.error ? <p className="text-[13px] font-medium text-orange">{state.error}</p> : null}
-      {state.ok ? <p className="text-[13px] text-slate">{state.ok}</p> : null}
+      {[state, modelState].map((result, index) => (
+        <div key={index}>
+          {result.error ? <p className="text-[13px] font-medium text-orange">{result.error}</p> : null}
+          {result.ok ? <p className="text-[13px] text-slate">{result.ok}</p> : null}
+        </div>
+      ))}
     </div>
   );
 }

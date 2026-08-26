@@ -2,18 +2,10 @@ import type { ReactElement } from "react";
 import { Document, Image, Page, Text, View, type DocumentProps } from "@react-pdf/renderer";
 import type { CalcResult, Tier } from "@/lib/pricing/engine";
 import { money, moneyRounded } from "@/lib/pricing/engine";
+import { approvalLabel, type StampInfo } from "./stamp";
 import { brand, styles } from "./theme";
 
-export interface StampInfo {
-  exportId: string;
-  exportedAt: Date;
-  exportedBy: string;
-  appVersion: string;
-  pricingVersion: string;
-  costBasis: string;
-  approvalState: string;
-  quoteRef?: string | null;
-}
+export { approvalLabel, type ApprovalState, type StampInfo } from "./stamp";
 
 export type DocType = "QUOTE" | "COGS";
 
@@ -22,6 +14,8 @@ export interface DocWorkspace {
   name: string;
   tierLabels: Record<Tier, string>;
   footer?: string | null;
+  /** Workspace accent colour; falls back to the product orange. */
+  accentColor?: string | null;
 }
 
 export interface DocProps {
@@ -51,19 +45,23 @@ function Header({
   title,
   workspaceName,
   logo,
+  accentColor,
 }: {
   stamp: StampInfo;
   clientName: string;
   title: string;
   workspaceName: string;
   logo?: Buffer;
+  accentColor?: string | null;
 }) {
   return (
     <View style={styles.headerRow}>
       <View>
         {/* eslint-disable-next-line jsx-a11y/alt-text -- react-pdf Image has no alt prop */}
         {logo ? <Image style={styles.logo} src={logo} /> : <Text style={styles.title}>{workspaceName}</Text>}
-        <Text style={styles.eyebrow}>{title.toUpperCase()}</Text>
+        <Text style={[styles.eyebrow, accentColor ? { color: accentColor } : {}]}>
+          {title.toUpperCase()}
+        </Text>
         <Text style={styles.title}>{clientName}</Text>
       </View>
       <View style={styles.headerRight}>
@@ -90,7 +88,7 @@ function Stamp({
       <Text>
         Export {stamp.exportId} · generated {utc(stamp.exportedAt)} by {stamp.exportedBy} · app{" "}
         {stamp.appVersion} · pricing version {stamp.pricingVersion} ({stamp.costBasis}) · approval:{" "}
-        {stamp.approvalState}
+        {approvalLabel(stamp)}
         {checksum ? ` · sha256 ${checksum.slice(0, 16)}` : ""}
       </Text>
       <Text>
@@ -130,7 +128,8 @@ export function QuoteDocument({ result, tier, clientName, notes, stamp, workspac
   const other = tier === "PINNACLE" ? result.advantage : result.pinnacle;
   const tierName = workspace.tierLabels[tier];
   const otherName = workspace.tierLabels[tier === "PINNACLE" ? "ADVANTAGE" : "PINNACLE"];
-  const pending = stamp.approvalState !== "APPROVED" && stamp.approvalState !== "STANDARD";
+  const pending = stamp.approvalState === "PENDING_APPROVAL";
+  const accent = workspace.accentColor ?? brand.orange;
 
   return (
     <Document
@@ -139,7 +138,7 @@ export function QuoteDocument({ result, tier, clientName, notes, stamp, workspac
       subject={`Agreement summary · pricing version ${stamp.pricingVersion}`}
       creator={`Agreement Calculator ${stamp.appVersion}`}
       producer={`Agreement Calculator ${stamp.appVersion}`}
-      keywords={`export:${stamp.exportId} pricing:${stamp.pricingVersion} approval:${stamp.approvalState}`}
+      keywords={`export:${stamp.exportId} pricing:${stamp.pricingVersion} approval:${approvalLabel(stamp)}`}
     >
       <Page size="LETTER" style={styles.page}>
         {pending ? <Text style={styles.watermark}>PENDING APPROVAL</Text> : null}
@@ -149,6 +148,7 @@ export function QuoteDocument({ result, tier, clientName, notes, stamp, workspac
           title="Managed services agreement"
           workspaceName={workspace.name}
           logo={logo}
+          accentColor={accent}
         />
         <Text style={styles.confidential}>PROPOSED MONTHLY INVESTMENT · {tierName.toUpperCase()}</Text>
 
@@ -160,7 +160,9 @@ export function QuoteDocument({ result, tier, clientName, notes, stamp, workspac
             <Text style={styles.highlightValue}>{moneyRounded(t.headlineRate)}</Text>
           </View>
           <View>
-            <Text style={styles.highlightSub}>{money(t.headlinePerUser)} per user / month</Text>
+            <Text style={[styles.highlightSub, { color: accent }]}>
+              {money(t.headlinePerUser)} per user / month
+            </Text>
           </View>
         </View>
 
@@ -247,7 +249,7 @@ export function CogsDocument({ result, tier, clientName, notes, stamp, workspace
       subject={`Internal COGS worksheet · pricing version ${stamp.pricingVersion}`}
       creator={`Agreement Calculator ${stamp.appVersion}`}
       producer={`Agreement Calculator ${stamp.appVersion}`}
-      keywords={`export:${stamp.exportId} pricing:${stamp.pricingVersion} approval:${stamp.approvalState}`}
+      keywords={`export:${stamp.exportId} pricing:${stamp.pricingVersion} approval:${approvalLabel(stamp)}`}
     >
       <Page size="LETTER" style={styles.page}>
         <Header
@@ -256,6 +258,7 @@ export function CogsDocument({ result, tier, clientName, notes, stamp, workspace
           title="Internal COGS worksheet"
           workspaceName={workspace.name}
           logo={logo}
+          accentColor={workspace.accentColor}
         />
         <Text style={styles.confidential}>
           INTERNAL ONLY · DO NOT SEND TO CLIENT · CONTAINS TOOL COST AND MARGIN
@@ -341,7 +344,9 @@ export function CogsDocument({ result, tier, clientName, notes, stamp, workspace
         </View>
 
         {result.triggers.length ? (
-          <View style={styles.approvalBlock}>
+          <View
+            style={[styles.approvalBlock, workspace.accentColor ? { borderColor: workspace.accentColor } : {}]}
+          >
             <Text style={styles.approvalTitle}>NON-STANDARD PRICING — LEADERSHIP REVIEW</Text>
             {result.triggers.map((tr) => (
               <Text key={tr.code} style={{ marginTop: 3 }}>
@@ -349,7 +354,7 @@ export function CogsDocument({ result, tier, clientName, notes, stamp, workspace
               </Text>
             ))}
             <Text style={{ marginTop: 5, fontFamily: "Helvetica-Bold" }}>
-              Approval state: {stamp.approvalState}
+              Approval state: {approvalLabel(stamp)}
             </Text>
           </View>
         ) : null}

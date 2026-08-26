@@ -3,6 +3,13 @@
 @tailwind utilities;
 
 @layer base {
+  /* House accent, overridden per workspace by AppLayout. */
+  :root {
+    --accent-rgb: 242 107 33;
+    --accent-tint-rgb: 251 169 76;
+    --accent-dark-rgb: 217 90 20;
+  }
+
   body {
     @apply bg-paper text-ink font-sans antialiased;
     font-size: 15px;
@@ -97,9 +104,9 @@ input[type="range"]::-moz-range-thumb {
 }
 
 input[type="range"].alert::-webkit-slider-thumb {
-  background: #f26b21;
+  background: rgb(var(--accent-rgb));
 }
 
 input[type="range"].alert::-moz-range-thumb {
-  background: #f26b21;
+  background: rgb(var(--accent-rgb));
 }

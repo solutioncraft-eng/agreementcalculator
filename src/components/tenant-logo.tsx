@@ -27,8 +27,11 @@ export function TenantLogo({
     );
   }
   return (
-    <span className="font-display text-[17px] font-bold leading-none tracking-tight text-navy">
-      {name}
+    <span className="flex items-center gap-2">
+      <Image src="/logo.svg" alt="Agreement Calculator" width={28} height={28} className="h-7 w-7" />
+      <span className="font-display text-[17px] font-bold leading-none tracking-tight text-navy">
+        {name}
+      </span>
     </span>
   );
 }

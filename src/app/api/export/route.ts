@@ -4,7 +4,13 @@ import { getTenantSession } from "@/lib/auth";
 import type { CalcInputs } from "@/lib/pricing/engine";
 import { calculate } from "@/lib/pricing/models";
 import { getActiveConfig, getConfigForVersion, tierLabels } from "@/lib/pricing/config";
-import { buildDocument, type DocWorkspace, type StampInfo } from "@/lib/pdf/documents";
+import {
+  approvalLabel,
+  buildDocument,
+  type ApprovalState,
+  type DocWorkspace,
+  type StampInfo,
+} from "@/lib/pdf/documents";
 import { newExportId, renderPdf, workspaceLogo } from "@/lib/pdf/render";
 import { exportPayloadSchema } from "@/lib/schemas";
 import { APP_VERSION_STAMP } from "@/lib/version";
@@ -36,7 +42,7 @@ export async function POST(request: Request) {
 
   let inputs: CalcInputs;
   let versionId: string | undefined;
-  let approvalState: string;
+  let approvalState: ApprovalState;
   let quoteRef: string | null = null;
   let clientName = payload.clientName;
   let notes = payload.notes || null;
@@ -73,7 +79,7 @@ export async function POST(request: Request) {
       bundleKey: quote.bundleKey,
     };
     versionId = quote.pricingVersionId;
-    approvalState = `APPROVED · ${quote.ref}`;
+    approvalState = "APPROVED";
     quoteRef = quote.ref;
     clientName = quote.clientName;
     notes = quote.notes;
@@ -121,6 +127,7 @@ export async function POST(request: Request) {
     name: tenant.name,
     tierLabels: tierLabels(tenant),
     footer: tenant.pdfFooter,
+    accentColor: tenant.accentColor,
   };
   const logo = await workspaceLogo(tenant.logoUrl);
   const props = { result, tier: payload.tier, clientName, notes, stamp, workspace, logo };
@@ -145,7 +152,7 @@ export async function POST(request: Request) {
       appVersion: APP_VERSION_STAMP,
       quoteId: quoteId ?? null,
       clientName,
-      approvalState,
+      approvalState: approvalLabel(stamp),
       inputs: { ...inputs, tier: payload.tier },
       checksum,
     },
@@ -155,7 +162,7 @@ export async function POST(request: Request) {
     action: "PDF_EXPORTED",
     entity: "ExportRecord",
     entityId: exportId,
-    summary: `${payload.docType === "COGS" ? "COGS worksheet" : "Agreement summary"} exported for ${clientName} (${approvalState})`,
+    summary: `${payload.docType === "COGS" ? "COGS worksheet" : "Agreement summary"} exported for ${clientName} (${approvalLabel(stamp)})`,
     after: { exportId, checksum, pricingVersion: config.versionLabel, tier: payload.tier },
     tenantId: tenant.id,
     actor: user,
