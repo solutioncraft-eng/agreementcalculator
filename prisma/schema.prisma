@@ -1,10 +1,16 @@
-// InfinIT MSP Agreement Calculator — data model
+// Agreement Calculator — multi-tenant data model
 //
-// Design constraint from the business: calculator *results* are not stored.
-// A quote is only persisted when the Account Manager deliberately submits it
-// for leadership review (QuoteRequest); everything else is calculated in the
-// browser and discarded. Audit trail, pricing versions and PDF export stamps
-// are stored permanently.
+// Two constraints shape this schema:
+//
+//  1. Calculator *results* are not stored. A quote is persisted only when an
+//     account manager deliberately submits it for leadership review
+//     (QuoteRequest); everything else is calculated and discarded. Audit
+//     trail, pricing versions and PDF export stamps are kept permanently.
+//
+//  2. Every tenant-owned row carries `tenantId`, including rows that could
+//     reach their tenant through a parent. Queries never have to join to
+//     filter, and the scoped Prisma client in src/lib/db.ts can inject the
+//     filter for every model in one place.
 
 generator client {
   provider = "prisma-client-js"
@@ -20,10 +26,25 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+/// Role within a single tenant. Held on Membership, not User, so one person
+/// can be an account manager in one workspace and a leader in another.
 enum Role {
   ADMIN
   LEADER
   AM
+}
+
+enum TenantStatus {
+  TRIAL
+  ACTIVE
+  SUSPENDED
+}
+
+/// How a tenant turns cost into a sell rate. Chosen when the workspace is
+/// created and locked once a pricing version is published.
+enum PricingModel {
+  COST_PLUS
+  MARKUP_MULTIPLE
 }
 
 enum Unit {
@@ -67,18 +88,56 @@ enum ExportDocType {
   COGS
 }
 
+/// A customer workspace. `slug` is the subdomain it is reached on.
+model Tenant {
+  id     String       @id @default(cuid())
+  slug   String       @unique
+  name   String
+  status TenantStatus @default(TRIAL)
+
+  /// Locked once a pricing version is published; only a super admin can change it.
+  pricingModel PricingModel @default(COST_PLUS)
+
+  // ── Branding ─────────────────────────────────────────────────────
+  /// Public URL of the tenant's uploaded logo. Falls back to the product mark.
+  logoUrl     String?
+  accentColor String?
+  pdfFooter   String?
+  /// Tenant names for the two service tiers, printed in the app and on PDFs.
+  advantageLabel String @default("Advantage")
+  pinnacleLabel  String @default("Pinnacle")
+
+  /// Months a submitted quote is retained before purge.
+  retentionMonths Int @default(12)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships     Membership[]
+  pricingVersions PricingVersion[]
+  cogsItems       CogsItem[]
+  bundles         BundleDiscount[]
+  quoteRequests   QuoteRequest[]
+  reviews         QuoteReview[]
+  exports         ExportRecord[]
+  auditEvents     AuditEvent[]
+}
+
+/// One login per person across the whole product; tenant access is granted by
+/// Membership rows. `isSuperAdmin` is the product operator, not a tenant role.
 model User {
   id           String    @id @default(cuid())
   email        String    @unique
   name         String
-  role         Role      @default(AM)
   passwordHash String
+  isSuperAdmin Boolean   @default(false)
   active       Boolean   @default(true)
   mustReset    Boolean   @default(false)
   lastLoginAt  DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
+  memberships      Membership[]
   auditEvents      AuditEvent[]
   quoteRequests    QuoteRequest[]   @relation("submitter")
   reviews          QuoteReview[]
@@ -87,29 +146,42 @@ model User {
   createdVersions  PricingVersion[] @relation("creator")
 }
 
+model Membership {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role     Role   @default(AM)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, userId])
+  @@index([userId])
+}
+
 /// An immutable-once-published snapshot of every number that drives a quote.
 /// Quotes and PDF exports pin the version they were produced with so any
 /// historical document can be reproduced exactly.
 model PricingVersion {
-  id     String        @id @default(cuid())
-  /// Human label, e.g. "2026.3". Unique across versions.
-  label  String        @unique
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  /// Human label, e.g. "2026.3". Unique within the tenant.
+  label  String
   status VersionStatus @default(DRAFT)
   /// Free-text cost basis shown on documents, e.g. "Q3 2026".
   costBasis String
   notes     String?
 
-  // ── Pricing model ────────────────────────────────────────────────
-  /// Labor is imputed as a multiple of tool cost (v11 default 3.10).
-  laborMultiplier   Decimal @db.Decimal(6, 4)
-  /// Default Service Gross Margin, percent (v11 default 50).
-  defaultSgmPct     Decimal @db.Decimal(5, 2)
-  /// Maximum Service Gross Margin the slider allows, percent.
-  maxSgmPct         Decimal @db.Decimal(5, 2)
-  /// Minimum per-user floor in dollars (v11 default 100).
-  minPerUserFloor   Decimal @db.Decimal(10, 2)
-  /// Reduced multiplier applied to low-touch Pinnacle add-on tools (v11 4.83).
-  addonMultiplier   Decimal @db.Decimal(6, 2)
+  /// Which pricing model produced this version, and its settings. The settings
+  /// shape differs per model and is validated with the model's zod schema
+  /// (src/lib/pricing/models); storing it as JSON keeps the table from growing
+  /// a column set per model.
+  model    PricingModel
+  settings Json
 
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -120,16 +192,21 @@ model PricingVersion {
   publishedById String?
   publishedBy   User?   @relation("publisher", fields: [publishedById], references: [id])
 
-  cogsItems      CogsItem[]
-  bundles        BundleDiscount[]
-  quoteRequests  QuoteRequest[]
-  exports        ExportRecord[]
+  cogsItems     CogsItem[]
+  bundles       BundleDiscount[]
+  quoteRequests QuoteRequest[]
+  exports       ExportRecord[]
+
+  @@unique([tenantId, label])
+  @@index([tenantId, status])
 }
 
-/// A cost of goods sold line: a tool InfinIT pays for, allocated to a unit
+/// A cost of goods sold line: a tool the MSP pays for, allocated to a unit
 /// basis (per user / per device / per location / flat per agreement).
 model CogsItem {
-  id        String  @id @default(cuid())
+  id        String         @id @default(cuid())
+  tenantId  String
+  tenant    Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   versionId String
   version   PricingVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
 
@@ -141,15 +218,20 @@ model CogsItem {
   unit      Unit
   tier      Tier
   unitCost  Decimal @db.Decimal(10, 4)
+  /// Sell price per unit, used by rate-card style models. Null for cost-plus.
+  unitPrice Decimal? @db.Decimal(10, 4)
   active    Boolean @default(true)
   sortOrder Int     @default(0)
 
   @@unique([versionId, key])
   @@index([versionId])
+  @@index([tenantId])
 }
 
 model BundleDiscount {
-  id        String  @id @default(cuid())
+  id        String         @id @default(cuid())
+  tenantId  String
+  tenant    Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   versionId String
   version   PricingVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
 
@@ -162,38 +244,43 @@ model BundleDiscount {
   sortOrder   Int     @default(0)
 
   @@unique([versionId, key])
+  @@index([tenantId])
 }
 
 /// Only created when a calculation trips an approval threshold and the AM
 /// submits it for review. Holds the inputs and the computed rate so leadership
 /// reviews the same numbers the AM saw.
 model QuoteRequest {
-  id     String      @id @default(cuid())
-  /// Short human reference, e.g. "Q-2026-0041".
-  ref    String      @unique
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  /// Short human reference, e.g. "QR-202603-8F3K". Unique within the tenant.
+  ref    String
   status QuoteStatus @default(PENDING)
 
   clientName String
   notes      String?
 
   // Inputs
-  users     Int
-  devices   Int
-  locations Int
+  users           Int
+  devices         Int
+  locations       Int
   sgmPct          Decimal @db.Decimal(5, 2)
   perUserFloor    Decimal @db.Decimal(10, 2)
   floorOverride   Boolean @default(false)
   addonMultiplier Decimal @db.Decimal(6, 2)
+  markupMultiple  Decimal @db.Decimal(6, 2)
   bundleKey       String
   requestedTier   Tier
 
   // Computed rate at submission time (what leadership signs off on)
-  advantageRate        Decimal @db.Decimal(12, 2)
-  advantagePerUser     Decimal @db.Decimal(12, 2)
-  pinnacleRate         Decimal @db.Decimal(12, 2)
-  pinnaclePerUser      Decimal @db.Decimal(12, 2)
+  advantageRate    Decimal  @db.Decimal(12, 2)
+  advantagePerUser Decimal  @db.Decimal(12, 2)
+  pinnacleRate     Decimal  @db.Decimal(12, 2)
+  pinnaclePerUser  Decimal  @db.Decimal(12, 2)
   /// Named approval triggers active at submission, e.g. ["SGM_NON_DEFAULT"].
-  triggers             String[]
+  triggers         String[]
 
   pricingVersionId String
   pricingVersion   PricingVersion @relation(fields: [pricingVersionId], references: [id])
@@ -201,23 +288,26 @@ model QuoteRequest {
   submittedById String
   submittedBy   User   @relation("submitter", fields: [submittedById], references: [id])
 
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-  decidedAt  DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  decidedAt DateTime?
   /// Retention: quote requests are purged after this date.
   purgeAfter DateTime
 
   reviews QuoteReview[]
   exports ExportRecord[]
 
-  @@index([status])
+  @@unique([tenantId, ref])
+  @@index([tenantId, status])
   @@index([submittedById])
 }
 
 model QuoteReview {
-  id      String       @id @default(cuid())
-  quoteId String
-  quote   QuoteRequest @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  id       String       @id @default(cuid())
+  tenantId String
+  tenant   Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  quoteId  String
+  quote    QuoteRequest @relation(fields: [quoteId], references: [id], onDelete: Cascade)
 
   action    ReviewAction
   comment   String?
@@ -226,6 +316,7 @@ model QuoteReview {
   createdAt DateTime     @default(now())
 
   @@index([quoteId])
+  @@index([tenantId])
 }
 
 /// One row per generated PDF. This is what makes "we know exactly how and when
@@ -233,7 +324,9 @@ model QuoteReview {
 /// (exportId + UTC timestamp + pricing version + app version) is looked up here.
 model ExportRecord {
   id       String        @id @default(cuid())
-  /// Printed on the PDF, e.g. "EXP-8F3K2D".
+  tenantId String
+  tenant   Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  /// Printed on the PDF, e.g. "EXP-8F3K2D". Unique across the product.
   exportId String        @unique
   docType  ExportDocType
 
@@ -259,19 +352,24 @@ model ExportRecord {
 
   createdAt DateTime @default(now())
 
+  @@index([tenantId, createdAt])
   @@index([exportedById])
-  @@index([createdAt])
 }
 
 model AuditEvent {
-  id      String  @id @default(cuid())
-  action  String
+  id       String  @id @default(cuid())
+  /// Null for events that happen before a tenant is known (failed sign-in) and
+  /// for super-admin actions on the product itself.
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  action   String
   /// Entity kind the action applied to, e.g. "CogsItem", "PricingVersion".
-  entity  String?
+  entity   String?
   entityId String?
-  summary String
-  before  Json?
-  after   Json?
+  summary  String
+  before   Json?
+  after    Json?
 
   actorId String?
   actor   User?   @relation(fields: [actorId], references: [id])
@@ -282,6 +380,6 @@ model AuditEvent {
   userAgent String?
   createdAt DateTime @default(now())
 
-  @@index([createdAt])
+  @@index([tenantId, createdAt])
   @@index([entity, entityId])
 }

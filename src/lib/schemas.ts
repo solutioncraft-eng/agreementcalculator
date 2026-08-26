@@ -11,6 +11,7 @@ export const calcInputsSchema = z.object({
   perUserFloor: z.coerce.number().min(0).max(10_000),
   floorOverride: z.coerce.boolean(),
   addonMultiplier: z.coerce.number().min(1).max(20),
+  markupMultiple: z.coerce.number().min(1).max(50),
   bundleKey: z.string().min(1).max(64),
 });
 
@@ -46,15 +47,40 @@ export const cogsItemSchema = z.object({
   sortOrder: z.coerce.number().int().min(0).max(999).optional(),
 });
 
-export const pricingModelSchema = z.object({
+/**
+ * A version's own metadata. The pricing numbers are model-specific and live
+ * behind the model's settings schema in `@/lib/pricing/models`.
+ */
+export const versionMetaSchema = z.object({
   label: z.string().trim().min(1).max(40),
   costBasis: z.string().trim().min(1).max(60),
-  laborMultiplier: z.coerce.number().min(0).max(20),
-  defaultSgmPct: z.coerce.number().min(0).max(95),
-  maxSgmPct: z.coerce.number().min(1).max(95),
-  minPerUserFloor: z.coerce.number().min(0).max(10_000),
-  addonMultiplier: z.coerce.number().min(1).max(20),
   notes: z.string().trim().max(1000).optional().or(z.literal("")),
+});
+
+export const tenantBrandingSchema = z.object({
+  name: z.string().trim().min(2).max(80),
+  accentColor: z
+    .string()
+    .trim()
+    .regex(/^#[0-9a-fA-F]{6}$/, "Use a hex colour such as #F26B21")
+    .optional()
+    .or(z.literal("")),
+  pdfFooter: z.string().trim().max(200).optional().or(z.literal("")),
+  advantageLabel: z.string().trim().min(2).max(40),
+  pinnacleLabel: z.string().trim().min(2).max(40),
+});
+
+export const createTenantSchema = z.object({
+  name: z.string().trim().min(2).max(80),
+  slug: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(/^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])$/, "Use 3-32 lowercase letters, numbers or dashes"),
+  pricingModel: z.enum(["COST_PLUS", "MARKUP_MULTIPLE"]),
+  adminEmail: z.string().trim().toLowerCase().email(),
+  adminName: z.string().trim().min(2).max(80),
+  seedPricing: z.coerce.boolean().optional(),
 });
 
 export const bundleSchema = z.object({

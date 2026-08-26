@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/db";
-import { canReview, requireUser } from "@/lib/auth";
+import { canReview, requireTenant } from "@/lib/auth";
 import { QuoteDetail } from "@/components/quote-detail";
 import { QuoteActions } from "./quote-actions";
 
@@ -9,19 +8,19 @@ export const dynamic = "force-dynamic";
 
 export default async function QuotePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const user = await requireUser();
-  const quote = await prisma.quoteRequest.findUnique({
+  const { user, role, tenant, db } = await requireTenant();
+  const quote = await db.quoteRequest.findUnique({
     where: { id },
     include: {
       submittedBy: { select: { name: true, email: true } },
       pricingVersion: { select: { label: true, costBasis: true } },
-      reviews: { orderBy: { createdAt: "asc" }, include: { actor: { select: { name: true, role: true } } } },
+      reviews: { orderBy: { createdAt: "asc" }, include: { actor: { select: { name: true } } } },
     },
   });
   if (!quote) notFound();
-  if (quote.submittedById !== user.id && !canReview(user.role)) notFound();
+  if (quote.submittedById !== user.id && !canReview(role)) notFound();
 
-  const exports = await prisma.exportRecord.findMany({
+  const exports = await db.exportRecord.findMany({
     where: { quoteId: quote.id },
     orderBy: { createdAt: "desc" },
     include: { exportedBy: { select: { name: true } } },
@@ -32,13 +31,13 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
       <Link href="/quotes" className="text-[13px] font-medium text-slate hover:text-orange">
         ← All quotes
       </Link>
-      <QuoteDetail quote={quote} />
+      <QuoteDetail quote={quote} tenant={tenant} db={db} />
       <QuoteActions
         quoteId={quote.id}
         status={quote.status}
         tier={quote.requestedTier}
         clientName={quote.clientName}
-        canWithdraw={quote.submittedById === user.id || user.role === "ADMIN"}
+        canWithdraw={quote.submittedById === user.id || role === "ADMIN"}
         exports={exports.map((record) => ({
           exportId: record.exportId,
           docType: record.docType,

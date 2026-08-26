@@ -43,3 +43,6 @@ monte-carlo-report.pdf
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# supabase cli scratch
+/supabase/.temp

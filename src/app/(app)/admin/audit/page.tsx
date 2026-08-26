@@ -1,6 +1,5 @@
 import Link from "next/link";
 import clsx from "clsx";
-import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
 import { formatUtc } from "@/lib/quotes";
 
@@ -21,21 +20,21 @@ export default async function AuditPage({
 }: {
   searchParams: Promise<{ page?: string; action?: string }>;
 }) {
-  await requireRole("ADMIN");
+  const { db } = await requireRole("ADMIN");
   const { page, action } = await searchParams;
   const current = Math.max(1, Number(page ?? 1) || 1);
 
   const where = action ? { action } : {};
   const [events, total, exports] = await Promise.all([
-    prisma.auditEvent.findMany({
+    db.auditEvent.findMany({
       where,
       orderBy: { createdAt: "desc" },
       skip: (current - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
       include: { actor: { select: { name: true } } },
     }),
-    prisma.auditEvent.count({ where }),
-    prisma.exportRecord.findMany({
+    db.auditEvent.count({ where }),
+    db.exportRecord.findMany({
       orderBy: { createdAt: "desc" },
       take: 15,
       include: {

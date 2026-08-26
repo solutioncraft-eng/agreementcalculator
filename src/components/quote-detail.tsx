@@ -1,7 +1,9 @@
 import clsx from "clsx";
-import type { PricingVersion, QuoteRequest, QuoteReview, User } from "@prisma/client";
-import { calculate, money, moneyRounded } from "@/lib/pricing/engine";
+import type { PricingVersion, QuoteRequest, QuoteReview, Tenant, User } from "@prisma/client";
+import { money, moneyRounded } from "@/lib/pricing/engine";
+import { calculate } from "@/lib/pricing/models";
 import { getConfigForVersion } from "@/lib/pricing/config";
+import type { TenantDb } from "@/lib/db";
 import { STATUS_CLASS, STATUS_LABEL, TRIGGER_LABEL, formatUtc, quoteInputs, tierName } from "@/lib/quotes";
 
 const ACTION_LABEL: Record<string, string> = {
@@ -17,11 +19,19 @@ const ACTION_LABEL: Record<string, string> = {
 export type QuoteWithRelations = QuoteRequest & {
   submittedBy: Pick<User, "name" | "email">;
   pricingVersion: Pick<PricingVersion, "label" | "costBasis">;
-  reviews: (QuoteReview & { actor: Pick<User, "name" | "role"> })[];
+  reviews: (QuoteReview & { actor: Pick<User, "name"> })[];
 };
 
-export async function QuoteDetail({ quote }: { quote: QuoteWithRelations }) {
-  const config = await getConfigForVersion(quote.pricingVersionId);
+export async function QuoteDetail({
+  quote,
+  tenant,
+  db,
+}: {
+  quote: QuoteWithRelations;
+  tenant: Tenant;
+  db: TenantDb;
+}) {
+  const config = await getConfigForVersion(db, tenant, quote.pricingVersionId);
   const inputs = quoteInputs(quote);
   const result = config ? calculate(config, inputs) : null;
   const tier = quote.requestedTier === "PINNACLE" ? result?.pinnacle : result?.advantage;
@@ -40,7 +50,7 @@ export async function QuoteDetail({ quote }: { quote: QuoteWithRelations }) {
             <p className="eyebrow">{quote.ref}</p>
             <h1 className="mt-2 text-[30px] leading-9">{quote.clientName}</h1>
             <p className="mt-1 text-[14px] text-slate">
-              {tierName(quote.requestedTier)} · submitted by {quote.submittedBy.name} ·{" "}
+              {tierName(tenant, quote.requestedTier)} · submitted by {quote.submittedBy.name} ·{" "}
               {formatUtc(quote.createdAt)}
             </p>
           </div>
@@ -65,9 +75,15 @@ export async function QuoteDetail({ quote }: { quote: QuoteWithRelations }) {
           <Stat label="Devices" value={String(quote.devices)} />
           <Stat label="Locations" value={String(quote.locations)} />
           <Stat label="Bundle" value={result?.bundle.label ?? quote.bundleKey} />
-          <Stat label="Service gross margin" value={`${quote.sgmPct.toNumber()}%`} />
+          {config?.model === "MARKUP_MULTIPLE" ? (
+            <Stat label="Markup multiple" value={`${quote.markupMultiple.toNumber()}×`} />
+          ) : (
+            <>
+              <Stat label="Service gross margin" value={`${quote.sgmPct.toNumber()}%`} />
+              <Stat label="Add-on multiplier" value={`${quote.addonMultiplier.toNumber()}×`} />
+            </>
+          )}
           <Stat label="Per-user floor" value={money(quote.perUserFloor.toNumber())} />
-          <Stat label="Add-on multiplier" value={`${quote.addonMultiplier.toNumber()}×`} />
           <Stat
             label="Pricing version"
             value={`${quote.pricingVersion.label} · ${quote.pricingVersion.costBasis}`}
@@ -98,17 +114,23 @@ export async function QuoteDetail({ quote }: { quote: QuoteWithRelations }) {
 
       {result && tier ? (
         <section className="card">
-          <h2 className="text-[18px]">Cost build — {tierName(quote.requestedTier)}</h2>
+          <h2 className="text-[18px]">Cost build — {tierName(tenant, quote.requestedTier)}</h2>
           <dl className="mt-4 space-y-2 text-[14px]">
             <Row label="Monthly tool cost" value={money(tier.toolCost)} />
-            <Row
-              label={`Imputed labor (${config!.laborMultiplier}× tool)`}
-              value={money(tier.costFloor - tier.toolCost)}
-              muted
-            />
+            {config?.model === "COST_PLUS" ? (
+              <Row
+                label={`Imputed labor (${config.settings.laborMultiplier}× tool)`}
+                value={money(tier.costFloor - tier.toolCost)}
+                muted
+              />
+            ) : null}
             <Row label="Hard cost floor" value={money(tier.costFloor)} strong />
             <Row
-              label={`Standard rate at ${result.split.sgmPct}% SGM`}
+              label={
+                config?.model === "COST_PLUS"
+                  ? `Standard rate at ${result.split.sgmPct}% SGM`
+                  : `Standard rate at ${quote.markupMultiple.toNumber()}× markup`
+              }
               value={money(tier.standardRate)}
             />
             {tier.discount > 0 ? (
@@ -119,7 +141,7 @@ export async function QuoteDetail({ quote }: { quote: QuoteWithRelations }) {
             ) : null}
             <Row label="Agreement rate" value={money(tier.headlineRate)} strong />
             <Row
-              label={`Alternative tier — ${tierName(quote.requestedTier === "PINNACLE" ? "ADVANTAGE" : "PINNACLE")}`}
+              label={`Alternative tier — ${tierName(tenant, quote.requestedTier === "PINNACLE" ? "ADVANTAGE" : "PINNACLE")}`}
               value={money(
                 quote.requestedTier === "PINNACLE"
                   ? quote.advantageRate.toNumber()
@@ -146,7 +168,7 @@ export async function QuoteDetail({ quote }: { quote: QuoteWithRelations }) {
               <p className="text-[14px]">
                 <span className="font-semibold text-navy">{review.actor.name}</span>{" "}
                 <span className="text-slate">
-                  ({review.actor.role}) {ACTION_LABEL[review.action] ?? review.action.toLowerCase()}
+                  {ACTION_LABEL[review.action] ?? review.action.toLowerCase()}
                 </span>
               </p>
               <p className="font-mono text-[11px] text-slate">{formatUtc(review.createdAt)}</p>

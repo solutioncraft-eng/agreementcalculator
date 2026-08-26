@@ -21,8 +21,8 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "infinIT Agreement Calculator",
-  description: "Internal managed services agreement pricing tool",
+  title: "Agreement Calculator",
+  description: "Managed services agreement pricing, review and approval",
   robots: { index: false, follow: false },
   icons: { icon: "/favicon-192.png" },
 };

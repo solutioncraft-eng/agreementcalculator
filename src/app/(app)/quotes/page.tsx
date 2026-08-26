@@ -1,14 +1,13 @@
 import Link from "next/link";
-import { prisma } from "@/lib/db";
-import { canReview, requireUser } from "@/lib/auth";
+import { canReview, requireTenant } from "@/lib/auth";
 import { QuoteTable } from "@/components/quote-table";
 
 export const dynamic = "force-dynamic";
 
 export default async function MyQuotesPage() {
-  const user = await requireUser();
-  const quotes = await prisma.quoteRequest.findMany({
-    where: canReview(user.role) ? {} : { submittedById: user.id },
+  const { user, role, tenant, db } = await requireTenant();
+  const quotes = await db.quoteRequest.findMany({
+    where: canReview(role) ? {} : { submittedById: user.id },
     orderBy: { createdAt: "desc" },
     take: 100,
     include: { submittedBy: { select: { name: true } } },
@@ -19,7 +18,7 @@ export default async function MyQuotesPage() {
       <header>
         <p className="eyebrow">Review requests</p>
         <h1 className="mt-2 text-[32px] leading-9">
-          {canReview(user.role) ? "All submitted quotes" : "My submitted quotes"}
+          {canReview(role) ? "All submitted quotes" : "My submitted quotes"}
         </h1>
         <p className="mt-2 max-w-2xl text-slate">
           Only quotes submitted for leadership review are stored. Standard quotes are calculated and
@@ -28,7 +27,12 @@ export default async function MyQuotesPage() {
       </header>
 
       {quotes.length ? (
-        <QuoteTable quotes={quotes} hrefBase="/quotes" showSubmitter={canReview(user.role)} />
+        <QuoteTable
+          quotes={quotes}
+          tenant={tenant}
+          hrefBase="/quotes"
+          showSubmitter={canReview(role)}
+        />
       ) : (
         <div className="card">
           <p className="text-slate">

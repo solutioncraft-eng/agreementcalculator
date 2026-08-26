@@ -1,6 +1,6 @@
 import Link from "next/link";
 import clsx from "clsx";
-import type { QuoteRequest } from "@prisma/client";
+import type { QuoteRequest, Tenant } from "@prisma/client";
 import { moneyRounded } from "@/lib/pricing/engine";
 import { STATUS_CLASS, STATUS_LABEL, formatUtc, tierName } from "@/lib/quotes";
 
@@ -8,10 +8,12 @@ type Row = QuoteRequest & { submittedBy?: { name: string } };
 
 export function QuoteTable({
   quotes,
+  tenant,
   hrefBase,
   showSubmitter,
 }: {
   quotes: Row[];
+  tenant: Pick<Tenant, "advantageLabel" | "pinnacleLabel">;
   hrefBase: string;
   showSubmitter?: boolean;
 }) {
@@ -46,7 +48,7 @@ export function QuoteTable({
                 {showSubmitter ? (
                   <td className="px-5 py-3 text-slate">{quote.submittedBy?.name ?? "—"}</td>
                 ) : null}
-                <td className="px-5 py-3">{tierName(quote.requestedTier)}</td>
+                <td className="px-5 py-3">{tierName(tenant, quote.requestedTier)}</td>
                 <td className="px-5 py-3 text-right font-medium">{moneyRounded(rate)}</td>
                 <td className="px-5 py-3 text-slate">{quote.triggers.length}</td>
                 <td className="px-5 py-3">

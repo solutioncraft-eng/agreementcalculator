@@ -1,14 +1,15 @@
 import Link from "next/link";
-import { requireUser } from "@/lib/auth";
+import { requireTenant } from "@/lib/auth";
 import { getActiveConfig } from "@/lib/pricing/config";
 import { DEFAULT_INPUTS } from "@/lib/pricing/defaults";
+import { startingInputs } from "@/lib/pricing/models";
 import { CalculatorClient } from "./calculator-client";
 
 export const dynamic = "force-dynamic";
 
 export default async function CalculatorPage() {
-  const user = await requireUser();
-  const config = await getActiveConfig();
+  const { tenant, role, db } = await requireTenant();
+  const config = await getActiveConfig(db, tenant);
 
   if (!config) {
     return (
@@ -19,7 +20,7 @@ export default async function CalculatorPage() {
           The calculator needs a published pricing version before it can quote. An administrator can create
           and publish one from the pricing settings.
         </p>
-        {user.role === "ADMIN" ? (
+        {role === "ADMIN" ? (
           <Link href="/admin/pricing" className="btn-primary mt-5 inline-block">
             Go to pricing settings
           </Link>
@@ -29,16 +30,6 @@ export default async function CalculatorPage() {
   }
 
   return (
-    <CalculatorClient
-      config={config}
-      defaults={{
-        ...DEFAULT_INPUTS,
-        sgmPct: config.defaultSgmPct,
-        perUserFloor: config.minPerUserFloor,
-        floorOverride: false,
-        addonMultiplier: config.addonMultiplier,
-        bundleKey: "none",
-      }}
-    />
+    <CalculatorClient config={config} defaults={{ ...DEFAULT_INPUTS, ...startingInputs(config) }} />
   );
 }

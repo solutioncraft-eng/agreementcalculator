@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { audit } from "@/lib/audit";
-import { prisma } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
-import { calculate, type CalcInputs } from "@/lib/pricing/engine";
-import { getActiveConfig, getConfigForVersion } from "@/lib/pricing/config";
-import { buildDocument, type StampInfo } from "@/lib/pdf/documents";
-import { brandLogo, newExportId, renderPdf } from "@/lib/pdf/render";
+import { getTenantSession } from "@/lib/auth";
+import type { CalcInputs } from "@/lib/pricing/engine";
+import { calculate } from "@/lib/pricing/models";
+import { getActiveConfig, getConfigForVersion, tierLabels } from "@/lib/pricing/config";
+import { buildDocument, type DocWorkspace, type StampInfo } from "@/lib/pdf/documents";
+import { newExportId, renderPdf, workspaceLogo } from "@/lib/pdf/render";
 import { exportPayloadSchema } from "@/lib/schemas";
 import { APP_VERSION_STAMP } from "@/lib/version";
 
@@ -17,8 +17,9 @@ function slug(value: string): string {
 }
 
 export async function POST(request: Request) {
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+  const session = await getTenantSession();
+  if (!session) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+  const { user, role, tenant, db } = session;
 
   const form = await request.formData();
   const raw = form.get("payload");
@@ -41,9 +42,9 @@ export async function POST(request: Request) {
   let notes = payload.notes || null;
 
   if (quoteId) {
-    const quote = await prisma.quoteRequest.findUnique({ where: { id: quoteId } });
+    const quote = await db.quoteRequest.findUnique({ where: { id: quoteId } });
     if (!quote) return NextResponse.json({ error: "Quote not found" }, { status: 404 });
-    if (quote.submittedById !== user.id && user.role === "AM") {
+    if (quote.submittedById !== user.id && role === "AM") {
       return NextResponse.json({ error: "Not your quote" }, { status: 403 });
     }
     if (quote.status !== "APPROVED") {
@@ -52,6 +53,7 @@ export async function POST(request: Request) {
         entity: "QuoteRequest",
         entityId: quote.id,
         summary: `Export of ${quote.ref} blocked — status ${quote.status}`,
+        tenantId: tenant.id,
         actor: user,
       });
       return NextResponse.json(
@@ -67,6 +69,7 @@ export async function POST(request: Request) {
       perUserFloor: quote.perUserFloor.toNumber(),
       floorOverride: quote.floorOverride,
       addonMultiplier: quote.addonMultiplier.toNumber(),
+      markupMultiple: quote.markupMultiple.toNumber(),
       bundleKey: quote.bundleKey,
     };
     versionId = quote.pricingVersionId;
@@ -80,7 +83,9 @@ export async function POST(request: Request) {
     approvalState = "STANDARD";
   }
 
-  const config = versionId ? await getConfigForVersion(versionId) : await getActiveConfig();
+  const config = versionId
+    ? await getConfigForVersion(db, tenant, versionId)
+    : await getActiveConfig(db, tenant);
   if (!config) return NextResponse.json({ error: "No published pricing version" }, { status: 409 });
 
   const result = calculate(config, inputs);
@@ -91,6 +96,7 @@ export async function POST(request: Request) {
       action: "PDF_EXPORT_BLOCKED",
       summary: `Export blocked for ${clientName} — ${result.triggers.length} approval trigger(s)`,
       after: { triggers: result.triggers.map((t) => t.code) },
+      tenantId: tenant.id,
       actor: user,
     });
     return NextResponse.json(
@@ -111,8 +117,13 @@ export async function POST(request: Request) {
     quoteRef,
   };
 
-  const logo = await brandLogo();
-  const props = { result, tier: payload.tier, clientName, notes, stamp, logo };
+  const workspace: DocWorkspace = {
+    name: tenant.name,
+    tierLabels: tierLabels(tenant),
+    footer: tenant.pdfFooter,
+  };
+  const logo = await workspaceLogo(tenant.logoUrl);
+  const props = { result, tier: payload.tier, clientName, notes, stamp, workspace, logo };
 
   let bytes: Buffer;
   let checksum: string;
@@ -124,8 +135,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: `The PDF could not be rendered: ${detail}` }, { status: 500 });
   }
 
-  await prisma.exportRecord.create({
+  await db.exportRecord.create({
     data: {
+      tenantId: tenant.id,
       exportId,
       docType: payload.docType,
       exportedById: user.id,
@@ -145,10 +157,11 @@ export async function POST(request: Request) {
     entityId: exportId,
     summary: `${payload.docType === "COGS" ? "COGS worksheet" : "Agreement summary"} exported for ${clientName} (${approvalState})`,
     after: { exportId, checksum, pricingVersion: config.versionLabel, tier: payload.tier },
+    tenantId: tenant.id,
     actor: user,
   });
 
-  const name = `infinIT-${payload.docType === "COGS" ? "COGS" : "agreement"}-${slug(clientName)}-${exportId}.pdf`;
+  const name = `${slug(tenant.slug)}-${payload.docType === "COGS" ? "COGS" : "agreement"}-${slug(clientName)}-${exportId}.pdf`;
   return new NextResponse(new Uint8Array(bytes), {
     headers: {
       "Content-Type": "application/pdf",

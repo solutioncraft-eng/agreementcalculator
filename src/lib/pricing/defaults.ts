@@ -1,5 +1,7 @@
 /**
- * Seed values carried over from the standalone calculator v11.
+ * Starting pricing content for a new workspace, carried over from the
+ * standalone InfinIT calculator v11. A tenant on the cost-plus model gets
+ * this as an editable draft; it is a starting point, not a product default.
  *
  * Labor multiplier note (from v11): labor is imputed as a multiple of tool
  * cost and is a proxy for real delivery labor, not a markup — it must be
@@ -10,7 +12,7 @@
 export const SEED_VERSION_LABEL = "2026.3";
 export const SEED_COST_BASIS = "Q3 2026";
 
-export const SEED_PRICING_MODEL = {
+export const SEED_COST_PLUS_SETTINGS = {
   laborMultiplier: 3.1,
   defaultSgmPct: 50,
   maxSgmPct: 70,

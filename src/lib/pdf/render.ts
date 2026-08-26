@@ -7,14 +7,30 @@ import type { ReactElement } from "react";
 
 let logoCache: Buffer | null | undefined;
 
+/** The product mark, used when a workspace has not uploaded its own logo. */
 export async function brandLogo(): Promise<Buffer | undefined> {
   if (logoCache !== undefined) return logoCache ?? undefined;
   try {
-    logoCache = await readFile(path.join(process.cwd(), "public", "infinit-logo.png"));
+    logoCache = await readFile(path.join(process.cwd(), "public", "logo.png"));
   } catch {
     logoCache = null;
   }
   return logoCache ?? undefined;
+}
+
+/**
+ * Workspace logos live in object storage, so they are fetched per export. A
+ * failure is never fatal: the document falls back to the workspace name.
+ */
+export async function workspaceLogo(logoUrl: string | null): Promise<Buffer | undefined> {
+  if (!logoUrl) return brandLogo();
+  try {
+    const response = await fetch(logoUrl, { cache: "force-cache" });
+    if (!response.ok) return undefined;
+    return Buffer.from(await response.arrayBuffer());
+  } catch {
+    return undefined;
+  }
 }
 
 /// Human-typable export id that ties a PDF to its export log row.

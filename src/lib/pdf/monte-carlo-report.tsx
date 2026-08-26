@@ -1,7 +1,7 @@
 import { Document, Image, Page, Text, View } from "@react-pdf/renderer";
 import type { DocumentProps } from "@react-pdf/renderer";
 import type { ReactElement } from "react";
-import { money, type CalcInputs, type PricingConfig } from "@/lib/pricing/engine";
+import { money, type CalcInputs, type CostPlusConfig } from "@/lib/pricing/engine";
 import { APP_VERSION_STAMP } from "@/lib/version";
 import { brandLogo, newExportId, renderPdf } from "./render";
 import { brand, styles } from "./theme";
@@ -26,7 +26,7 @@ export interface Simulation {
   trials: number;
   seed: number;
   configSource: string;
-  config: PricingConfig;
+  config: CostPlusConfig;
   invariants: InvariantOutcome[];
   failures: { invariantId: string; inputs: CalcInputs; message: string }[];
   flaggedPct: number;
@@ -73,17 +73,17 @@ function MonteCarloDocument({ sim, logo }: { sim: Simulation; logo?: Buffer }) {
   return (
     <Document
       title={`Pricing engine Monte Carlo report — ${sim.trials.toLocaleString("en-US")} trials`}
-      author="infinIT Managed Services"
+      author="Agreement Calculator"
       subject={`Randomised verification of pricing version ${sim.config.versionLabel}`}
-      creator={`InfinIT Agreement Calculator ${APP_VERSION_STAMP}`}
-      producer={`InfinIT Agreement Calculator ${APP_VERSION_STAMP}`}
+      creator={`Agreement Calculator ${APP_VERSION_STAMP}`}
+      producer={`Agreement Calculator ${APP_VERSION_STAMP}`}
       keywords={`monte-carlo seed:${sim.seed} trials:${sim.trials} pricing:${sim.config.versionLabel}`}
     >
       <Page size="LETTER" style={styles.page}>
         <View style={styles.headerRow}>
           <View>
             {/* eslint-disable-next-line jsx-a11y/alt-text -- react-pdf Image has no alt prop */}
-            {logo ? <Image style={styles.logo} src={logo} /> : <Text style={styles.title}>infinIT</Text>}
+            {logo ? <Image style={styles.logo} src={logo} /> : <Text style={styles.title}>Agreement Calculator</Text>}
             <Text style={styles.eyebrow}>PRICING ENGINE VERIFICATION</Text>
             <Text style={styles.title}>Monte Carlo simulation</Text>
           </View>
@@ -179,7 +179,7 @@ function MonteCarloDocument({ sim, logo }: { sim: Simulation; logo?: Buffer }) {
             {sim.trials.toLocaleString("en-US")}
           </Text>
           <Text>
-            Verification artefact for the InfinIT Agreement Calculator pricing engine. Not a client-facing document.
+            Verification artefact for the Agreement Calculator pricing engine. Not a client-facing document.
           </Text>
         </View>
       </Page>
@@ -254,11 +254,11 @@ function MonteCarloDocument({ sim, logo }: { sim: Simulation; logo?: Buffer }) {
           <Text style={styles.sectionTitle}>PRICING VERSION UNDER TEST</Text>
           <View style={styles.table}>
             {[
-              ["Labor multiplier", `${sim.config.laborMultiplier}×`],
-              ["Default service gross margin", `${sim.config.defaultSgmPct}%`],
-              ["Maximum service gross margin", `${sim.config.maxSgmPct}%`],
-              ["Minimum per-user floor", money(sim.config.minPerUserFloor)],
-              ["Pinnacle add-on multiplier", `${sim.config.addonMultiplier}×`],
+              ["Labor multiplier", `${sim.config.settings.laborMultiplier}×`],
+              ["Default service gross margin", `${sim.config.settings.defaultSgmPct}%`],
+              ["Maximum service gross margin", `${sim.config.settings.maxSgmPct}%`],
+              ["Minimum per-user floor", money(sim.config.settings.minPerUserFloor)],
+              ["Add-on multiplier", `${sim.config.settings.addonMultiplier}×`],
               ["Active COGS items", String(sim.config.items.length)],
               ["Bundles", sim.config.bundles.map((b) => b.label).join(", ")],
             ].map(([label, value]) => (
