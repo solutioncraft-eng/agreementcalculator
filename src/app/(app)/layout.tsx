@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { canAdminister, canReview, membershipsFor, requireTenant } from "@/lib/auth";
+import { accentStyle } from "@/lib/branding";
 import { APP_VERSION } from "@/lib/version";
 import { NavLink } from "@/components/nav-link";
 import { TenantLogo } from "@/components/tenant-logo";
@@ -23,7 +24,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   });
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen" style={accentStyle(tenant.accentColor)}>
       <header className="border-b border-mist bg-white">
         <div className="mx-auto flex max-w-content items-center gap-6 px-6 py-3 md:px-10 lg:px-16">
           <Link href="/calculator" className="shrink-0">

@@ -14,10 +14,12 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Accent channels are CSS variables so a workspace can theme the app
+        // with its own colour; the defaults are the house orange.
         orange: {
-          DEFAULT: "#F26B21",
-          tint: "#FBA94C",
-          dark: "#D95A14",
+          DEFAULT: "rgb(var(--accent-rgb) / <alpha-value>)",
+          tint: "rgb(var(--accent-tint-rgb) / <alpha-value>)",
+          dark: "rgb(var(--accent-dark-rgb) / <alpha-value>)",
         },
         navy: {
           DEFAULT: "#12253A",

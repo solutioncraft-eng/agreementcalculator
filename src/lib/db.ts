@@ -76,7 +76,7 @@ export function scopeArgs<T extends QueryArgs>(
   operation: string,
   args: T,
   tenantId: string,
-): T {
+): T & QueryArgs {
   const scoped: QueryArgs = { ...args };
 
   if (WHERE_OPS.has(operation)) {

@@ -37,6 +37,12 @@ export default async function SuperPage() {
     lastEvents.filter((row) => row.tenantId).map((row) => [row.tenantId as string, row._max.createdAt]),
   );
 
+  const models = Object.entries(PRICING_MODELS).map(([key, model]) => ({
+    key,
+    label: model.label,
+    summary: model.summary,
+  }));
+
   const totals = {
     workspaces: tenants.length,
     people: tenants.reduce((sum, t) => sum + t._count.memberships, 0),
@@ -76,6 +82,7 @@ export default async function SuperPage() {
           return (
             <TenantRow
               key={tenant.id}
+              models={models}
               tenant={{
                 id: tenant.id,
                 name: tenant.name,
@@ -102,13 +109,7 @@ export default async function SuperPage() {
         ) : null}
       </section>
 
-      <CreateTenantForm
-        models={Object.entries(PRICING_MODELS).map(([key, model]) => ({
-          key,
-          label: model.label,
-          summary: model.summary,
-        }))}
-      />
+      <CreateTenantForm models={models} />
     </div>
   );
 }
