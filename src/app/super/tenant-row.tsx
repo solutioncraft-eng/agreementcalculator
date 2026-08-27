@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import clsx from "clsx";
 import type { TenantStatus } from "@prisma/client";
 import { setPricingModel, setTenantStatus, type SuperState } from "./actions";
+import { BillingControls } from "./billing-controls";
 
 interface Row {
   id: string;
@@ -12,6 +13,10 @@ interface Row {
   status: TenantStatus;
   /** What the workspace is running on: trial, subscription, or comp. */
   billing: string;
+  /** Why it is comped, when it is. */
+  compReason: string | null;
+  /** Whether Stripe has a subscription we can act on. */
+  hasSubscription: boolean;
   pricingModel: string;
   pricingModelLabel: string;
   createdAt: string;
@@ -31,6 +36,7 @@ const STATUS_CLASS: Record<TenantStatus, string> = {
   TRIAL: "bg-orange-tint/25 text-orange-dark",
   ACTIVE: "bg-navy text-white",
   SUSPENDED: "bg-ink text-white",
+  COMPLIMENTARY: "bg-mist text-navy",
 };
 
 export function TenantRow({ tenant, models }: { tenant: Row; models: PricingModelOption[] }) {
@@ -122,6 +128,13 @@ export function TenantRow({ tenant, models }: { tenant: Row; models: PricingMode
           {result.ok ? <p className="text-[13px] text-slate">{result.ok}</p> : null}
         </div>
       ))}
+
+      <BillingControls
+        tenantId={tenant.id}
+        status={tenant.status}
+        compReason={tenant.compReason}
+        hasSubscription={tenant.hasSubscription}
+      />
     </div>
   );
 }

@@ -16,6 +16,7 @@ export default async function BillingPage({ searchParams }: Props) {
   const params = await searchParams;
   const access = workspaceAccess(tenant);
   const subscribed = access.reason === "SUBSCRIBED" || access.reason === "IN_GRACE";
+  const comped = access.reason === "COMPLIMENTARY";
 
   return (
     <div className="space-y-6">
@@ -69,6 +70,12 @@ export default async function BillingPage({ searchParams }: Props) {
               <dd>{formatUtc(tenant.currentPeriodEnd)}</dd>
             </div>
           ) : null}
+          {comped && access.deadline ? (
+            <div className="flex justify-between gap-4">
+              <dt className="text-slate">Complimentary until</dt>
+              <dd>{formatUtc(access.deadline)}</dd>
+            </div>
+          ) : null}
           {access.reason === "IN_GRACE" && access.deadline ? (
             <div className="flex justify-between gap-4">
               <dt className="text-slate">Access until</dt>
@@ -84,8 +91,14 @@ export default async function BillingPage({ searchParams }: Props) {
           </p>
         ) : null}
 
+        {comped ? (
+          <p className="mt-4 rounded-brand bg-mist px-3 py-2 text-[13px] text-slate">
+            {tenant.name} is complimentary — nothing is charged for it.
+          </p>
+        ) : null}
+
         <div className="mt-6 flex flex-wrap gap-3">
-          {subscribed ? (
+          {comped ? null : subscribed ? (
             <form action={openBillingPortal}>
               <button type="submit" className="btn-primary">
                 Manage billing

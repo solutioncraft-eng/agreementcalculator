@@ -38,6 +38,10 @@ enum TenantStatus {
   TRIAL
   ACTIVE
   SUSPENDED
+
+  /// Never billed — a partner, an internal workspace or a goodwill arrangement.
+  /// Kept apart from ACTIVE so a comped workspace is never counted as revenue.
+  COMPLIMENTARY
 }
 
 /// How a tenant turns cost into a sell rate. Chosen when the workspace is
@@ -123,6 +127,11 @@ model Tenant {
   /// While a payment is failing, how long the workspace keeps working. Set
   /// from `invoice.payment_failed`, cleared once Stripe reports it healthy.
   graceEndsAt DateTime?
+
+  /// Why the workspace is comped, and until when. Both only mean anything while
+  /// the status is COMPLIMENTARY; a null expiry is an open-ended arrangement.
+  compReason    String?
+  compExpiresAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

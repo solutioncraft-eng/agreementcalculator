@@ -20,6 +20,7 @@ function tenant(overrides: Partial<BillingTenant> = {}): BillingTenant {
     subscriptionStatus: null,
     currentPeriodEnd: null,
     graceEndsAt: null,
+    compExpiresAt: null,
     ...overrides,
   };
 }
@@ -91,6 +92,65 @@ test("operator activation still comps a workspace with no Stripe subscription", 
 test("a failing subscription outranks operator activation so lapsed cards are noticed", () => {
   const lapsed = tenant({ status: "ACTIVE", subscriptionStatus: "past_due", graceEndsAt: null });
   assert.equal(workspaceAccess(lapsed, now).allowed, false);
+});
+
+test("a complimentary workspace works whatever Stripe says", () => {
+  const comped = tenant({ status: "COMPLIMENTARY", compExpiresAt: null });
+  for (const at of [now, afterTrial]) {
+    assert.deepEqual(pick(workspaceAccess(comped, at)), {
+      allowed: true,
+      reason: "COMPLIMENTARY",
+    });
+  }
+
+  // A failed card must not shut a comped workspace down: the comp is a decision
+  // about the relationship, not about the invoice.
+  const compedAndFailing = tenant({
+    status: "COMPLIMENTARY",
+    subscriptionStatus: "unpaid",
+    graceEndsAt: null,
+  });
+  assert.deepEqual(pick(workspaceAccess(compedAndFailing, afterTrial)), {
+    allowed: true,
+    reason: "COMPLIMENTARY",
+  });
+});
+
+test("a complimentary period with an end date closes on it", () => {
+  const ends = new Date("2026-09-01T00:00:00Z");
+  const comped = tenant({ status: "COMPLIMENTARY", compExpiresAt: ends });
+  assert.deepEqual(pick(workspaceAccess(comped, now)), { allowed: true, reason: "COMPLIMENTARY" });
+  assert.deepEqual(pick(workspaceAccess(comped, new Date(ends.getTime() + 1))), {
+    allowed: false,
+    reason: "COMPLIMENTARY_ENDED",
+  });
+});
+
+test("a subscription taking over an expired comp keeps the workspace open", () => {
+  const ends = new Date("2026-09-01T00:00:00Z");
+  const subscribed = tenant({
+    status: "COMPLIMENTARY",
+    compExpiresAt: ends,
+    subscriptionStatus: "active",
+  });
+  assert.deepEqual(pick(workspaceAccess(subscribed, new Date(ends.getTime() + 1))), {
+    allowed: true,
+    reason: "SUBSCRIBED",
+  });
+});
+
+test("a reset trial reopens a workspace whose subscription had lapsed", () => {
+  // What the operator's trial reset writes: a fresh deadline, and the lapsed
+  // subscription state cleared so it cannot keep the paywall up.
+  const resetAt = afterTrial;
+  const reset = tenant({
+    status: "TRIAL",
+    trialEndsAt: trialEndFrom(resetAt),
+    subscriptionStatus: null,
+    graceEndsAt: null,
+  });
+  assert.deepEqual(pick(workspaceAccess(reset, resetAt)), { allowed: true, reason: "TRIAL" });
+  assert.equal(workspaceAccess(reset, trialEndFrom(resetAt)).allowed, false);
 });
 
 test("a subscription update clears the grace deadline only once Stripe is happy", () => {
