@@ -54,11 +54,6 @@ enum Unit {
   FLAT
 }
 
-enum Tier {
-  ADVANTAGE
-  PINNACLE
-}
-
 enum VersionStatus {
   DRAFT
   PUBLISHED
@@ -108,9 +103,6 @@ model Tenant {
   logoUrl     String?
   accentColor String?
   pdfFooter   String?
-  /// Tenant names for the two service tiers, printed in the app and on PDFs.
-  advantageLabel String @default("Advantage")
-  pinnacleLabel  String @default("Pinnacle")
 
   /// Months a submitted quote is retained before purge.
   retentionMonths Int @default(12)
@@ -120,6 +112,7 @@ model Tenant {
 
   memberships     Membership[]
   pricingVersions PricingVersion[]
+  serviceTiers    ServiceTier[]
   cogsItems       CogsItem[]
   bundles         BundleDiscount[]
   quoteRequests   QuoteRequest[]
@@ -197,6 +190,7 @@ model PricingVersion {
   publishedById String?
   publishedBy   User?   @relation("publisher", fields: [publishedById], references: [id])
 
+  serviceTiers  ServiceTier[]
   cogsItems     CogsItem[]
   bundles       BundleDiscount[]
   quoteRequests QuoteRequest[]
@@ -204,6 +198,33 @@ model PricingVersion {
 
   @@unique([tenantId, label])
   @@index([tenantId, status])
+}
+
+/// A service level a workspace sells, e.g. "Advantage" then "Pinnacle". Tiers
+/// are ordered and cumulative: a quote for the third tier includes the COGS
+/// items of the first two, and each tier above the first is priced with the
+/// add-on multiplier. They belong to a pricing version rather than the tenant
+/// so publishing freezes the offering set along with the numbers, and a
+/// historical quote keeps reproducing the tiers it was priced against.
+model ServiceTier {
+  id        String         @id @default(cuid())
+  tenantId  String
+  tenant    Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  versionId String
+  version   PricingVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  /// Stable machine key, unique within a version; referenced by CogsItem.tierKey.
+  key String
+  /// Tenant-facing name, e.g. "Advantage".
+  label String
+  /// One line describing what the tier is, shown on the calculator card.
+  description String?
+  /// Position in the ladder. The lowest is the base tier everything builds on.
+  sortOrder Int @default(0)
+
+  @@unique([versionId, key])
+  @@index([versionId])
+  @@index([tenantId])
 }
 
 /// A cost of goods sold line: a tool the MSP pays for, allocated to a unit
@@ -221,7 +242,8 @@ model CogsItem {
   label     String
   vendor    String?
   unit      Unit
-  tier      Tier
+  /// ServiceTier.key within the same version this item belongs to.
+  tierKey   String
   unitCost  Decimal @db.Decimal(10, 4)
   /// Sell price per unit, used by rate-card style models. Null for cost-plus.
   unitPrice Decimal? @db.Decimal(10, 4)
@@ -276,16 +298,17 @@ model QuoteRequest {
   floorOverride   Boolean @default(false)
   addonMultiplier Decimal @db.Decimal(6, 2)
   markupMultiple  Decimal @db.Decimal(6, 2)
-  bundleKey       String
-  requestedTier   Tier
+  bundleKey        String
+  /// ServiceTier.key the account manager asked leadership to approve.
+  requestedTierKey String
 
-  // Computed rate at submission time (what leadership signs off on)
-  advantageRate    Decimal  @db.Decimal(12, 2)
-  advantagePerUser Decimal  @db.Decimal(12, 2)
-  pinnacleRate     Decimal  @db.Decimal(12, 2)
-  pinnaclePerUser  Decimal  @db.Decimal(12, 2)
+  /// Every tier's computed rate at submission time — what leadership signs off
+  /// on — as [{ key, label, rate, perUser }], ordered as the ladder was then.
+  /// Stored rather than recomputed so the review shows the numbers the account
+  /// manager saw, and reads correctly even if the version is later archived.
+  tierRates Json
   /// Named approval triggers active at submission, e.g. ["SGM_NON_DEFAULT"].
-  triggers         String[]
+  triggers  String[]
 
   pricingVersionId String
   pricingVersion   PricingVersion @relation(fields: [pricingVersionId], references: [id])

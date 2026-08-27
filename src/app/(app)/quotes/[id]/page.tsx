@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export default async function QuotePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { user, role, tenant, db } = await requireTenant();
+  const { user, role, db } = await requireTenant();
   const quote = await db.quoteRequest.findUnique({
     where: { id },
     include: {
@@ -31,11 +31,11 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
       <Link href="/quotes" className="text-[13px] font-medium text-slate hover:text-orange">
         ← All quotes
       </Link>
-      <QuoteDetail quote={quote} tenant={tenant} db={db} />
+      <QuoteDetail quote={quote} db={db} />
       <QuoteActions
         quoteId={quote.id}
         status={quote.status}
-        tier={quote.requestedTier}
+        tierKey={quote.requestedTierKey}
         clientName={quote.clientName}
         canWithdraw={quote.submittedById === user.id || role === "ADMIN"}
         exports={exports.map((record) => ({

@@ -3,9 +3,9 @@
  *
  * A tenant chooses a pricing *model* when its workspace is created, and every
  * pricing version records which model produced it. The models share
- * everything around the calculation — the COGS item list, the two tiers, the
- * bundle discounts, the approval thresholds concept, the audit trail and the
- * stamped PDFs — and differ only in how cost becomes a sell rate:
+ * everything around the calculation — the COGS item list, the offering ladder,
+ * the bundle discounts, the approval thresholds concept, the audit trail and
+ * the stamped PDFs — and differ only in how cost becomes a sell rate:
  *
  *   COST_PLUS        rate = (tool + imputed labor) / (1 - service gross margin)
  *   MARKUP_MULTIPLE  rate = tool × markup multiple
@@ -13,18 +13,31 @@
  * Each model lives in ./models/<model>.ts behind {@link PricingModelAdapter},
  * so adding one is additive: a settings type, a calculate function and a set
  * of approval triggers. Nothing outside this directory branches on the model.
+ *
+ * A version defines its own ordered offerings (service tiers). They are
+ * cumulative: the lowest is the base everything is built from, and each one
+ * above it adds its own COGS items on top of every tier below, priced with the
+ * add-on multiplier rather than the base one. {@link priceTiers} owns that
+ * arithmetic for every model, so a model only decides three multipliers.
  */
 
 export type Unit = "USER" | "DEVICE" | "LOCATION" | "FLAT";
-export type Tier = "ADVANTAGE" | "PINNACLE";
 export type PricingModelKey = "COST_PLUS" | "MARKUP_MULTIPLE";
+
+/** One offering a workspace sells, as frozen into a pricing version. */
+export interface ServiceTierDef {
+  key: string;
+  label: string;
+  description?: string | null;
+  sortOrder?: number;
+}
 
 export interface CogsLine {
   key: string;
   label: string;
   vendor?: string | null;
   unit: Unit;
-  tier: Tier;
+  tierKey: string;
   unitCost: number;
   sortOrder?: number;
 }
@@ -70,8 +83,8 @@ interface ConfigBase {
   costBasis: string;
   items: CogsLine[];
   bundles: BundleOption[];
-  /** Tenant's names for the two tiers, e.g. "Advantage" / "Pinnacle". */
-  tierLabels: Record<Tier, string>;
+  /** The version's offerings, cheapest first. Always at least one. */
+  tiers: ServiceTierDef[];
 }
 
 export type CostPlusConfig = ConfigBase & { model: "COST_PLUS"; settings: CostPlusSettings };
@@ -102,8 +115,7 @@ export interface CalcInputs {
 export type TriggerCode =
   | "SGM_NON_DEFAULT"
   | "FLOOR_CHANGED"
-  | "ADVANTAGE_BELOW_FLOOR"
-  | "PINNACLE_BELOW_FLOOR"
+  | "TIER_BELOW_FLOOR"
   | "FLOOR_OVERRIDE"
   | "DISCOUNT_CAPPED_AT_COST"
   | "ADDON_MULTIPLIER_NON_DEFAULT"
@@ -122,8 +134,12 @@ export interface LineResult extends CogsLine {
 }
 
 export interface TierResult {
-  tier: Tier;
-  /** Monthly tool (license) cost — confidential. */
+  key: string;
+  label: string;
+  description?: string | null;
+  /** Position in the ladder; 0 is the base offering. */
+  index: number;
+  /** Monthly tool cost — confidential, cumulative with the tiers below. */
   toolCost: number;
   /** The rate can never fall below this. Cost-plus adds imputed labor. */
   costFloor: number;
@@ -138,7 +154,18 @@ export interface TierResult {
   headlinePerUser: number;
   belowFloor: boolean;
   discountCappedAtCost: boolean;
+  /** This tier's own COGS lines. The tiers below it carry the rest. */
   lines: LineResult[];
+}
+
+/** A step up from one offering to the next in the ladder. */
+export interface TierDelta {
+  fromKey: string;
+  toKey: string;
+  toolCost: number;
+  standardRate: number;
+  discountedRate: number;
+  perUser: number;
 }
 
 export interface CalcResult {
@@ -152,10 +179,10 @@ export interface CalcResult {
    * margin; markup has no imputed labor, so labor is zero.
    */
   split: { toolPct: number; laborPct: number; sgmPct: number };
-  advantage: TierResult;
-  pinnacle: TierResult;
-  /** Upgrade delta, Advantage → Pinnacle. */
-  delta: { toolCost: number; standardRate: number; discountedRate: number; perUser: number };
+  /** Every offering priced, cheapest first. Never empty. */
+  tiers: TierResult[];
+  /** One entry per step up the ladder, so one fewer than `tiers`. */
+  deltas: TierDelta[];
   floorRate: number;
   triggers: Trigger[];
   needsApproval: boolean;
@@ -196,14 +223,30 @@ export function bundleFor(config: PricingConfig, key: string): BundleOption {
   return config.bundles.find((b) => b.key === key) ?? NO_BUNDLE;
 }
 
-export function linesFor(config: PricingConfig, tier: Tier, inputs: CalcInputs): LineResult[] {
+export function linesFor(config: PricingConfig, tierKey: string, inputs: CalcInputs): LineResult[] {
   return config.items
-    .filter((it) => it.tier === tier)
+    .filter((it) => it.tierKey === tierKey)
     .map((it) => {
       const quantity = quantityFor(it.unit, inputs);
       return { ...it, quantity, monthlyCost: it.unitCost * quantity };
     })
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+}
+
+/** The version's offerings in ladder order, cheapest first. */
+export function orderedTiers(config: PricingConfig): ServiceTierDef[] {
+  return [...config.tiers].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+}
+
+/** The offering a key names, or the base offering when it names none. */
+export function tierResultFor(result: CalcResult, key: string): TierResult {
+  return result.tiers.find((t) => t.key === key) ?? result.tiers[0];
+}
+
+/** Every line included in an offering: its own, plus every tier below it. */
+export function includedLines(result: CalcResult, key: string): LineResult[] {
+  const index = tierResultFor(result, key).index;
+  return result.tiers.filter((t) => t.index <= index).flatMap((t) => t.lines);
 }
 
 /**
@@ -224,6 +267,90 @@ export function applyFloor(rate: number, inputs: CalcInputs) {
   const floorRate = inputs.perUserFloor * users;
   const belowFloor = !inputs.floorOverride && rate / users < inputs.perUserFloor;
   return { users, floorRate, belowFloor, headlineRate: belowFloor ? floorRate : rate };
+}
+
+/** How a model turns tool cost into a rate, for one set of quote inputs. */
+export interface TierPricing {
+  /** Cost floor multiplier on the base tier's tools, e.g. 1 + labor multiple. */
+  costMultiplier: number;
+  /** Sell multiplier on the base tier's tools. */
+  baseMultiplier: number;
+  /** Sell multiplier on the tools each tier above the base adds. */
+  addonMultiplier: number;
+  /** Bundle discount as a fraction, e.g. 0.15. */
+  bundlePct: number;
+}
+
+/**
+ * Prices the whole offering ladder. Every tier is cumulative: its cost floor
+ * and rate include everything the tiers below it contain, so a tier can never
+ * come out cheaper than the one under it, and the two-tier case reduces to the
+ * original base + add-ons arithmetic exactly.
+ */
+export function priceTiers(
+  config: PricingConfig,
+  inputs: CalcInputs,
+  pricing: TierPricing,
+): { tiers: TierResult[]; deltas: TierDelta[]; floorRate: number; users: number } {
+  const defs = orderedTiers(config);
+  const users = Math.max(inputs.users, 1);
+  const floorRate = inputs.perUserFloor * users;
+
+  let baseTool = 0;
+  let addonTool = 0;
+  const tiers = defs.map((def, index) => {
+    const lines = linesFor(config, def.key, inputs);
+    const ownTool = lines.reduce((sum, line) => sum + line.monthlyCost, 0);
+    if (index === 0) baseTool = ownTool;
+    else addonTool += ownTool;
+
+    const costFloor = baseTool * pricing.costMultiplier + addonTool;
+    const standardRate = baseTool * pricing.baseMultiplier + addonTool * pricing.addonMultiplier;
+    const bundle = applyBundle(standardRate, costFloor, pricing.bundlePct);
+    const floor = applyFloor(bundle.final, inputs);
+
+    return {
+      key: def.key,
+      label: def.label,
+      description: def.description,
+      index,
+      toolCost: baseTool + addonTool,
+      costFloor,
+      standardRate,
+      discount: bundle.discount,
+      discountedRate: bundle.final,
+      headlineRate: floor.headlineRate,
+      perUser: bundle.final / users,
+      headlinePerUser: floor.headlineRate / users,
+      belowFloor: floor.belowFloor,
+      discountCappedAtCost: bundle.capped,
+      lines,
+    };
+  });
+
+  const deltas = tiers.slice(1).map((tier, i) => {
+    const previous = tiers[i];
+    return {
+      fromKey: previous.key,
+      toKey: tier.key,
+      toolCost: tier.toolCost - previous.toolCost,
+      standardRate: tier.standardRate - previous.standardRate,
+      discountedRate: tier.discountedRate - previous.discountedRate,
+      perUser: (tier.discountedRate - previous.discountedRate) / users,
+    };
+  });
+
+  return { tiers, deltas, floorRate, users };
+}
+
+/** One trigger per offering whose rate landed under the per-user floor. */
+export function belowFloorTriggers(tiers: TierResult[], inputs: CalcInputs): Trigger[] {
+  return tiers
+    .filter((tier) => tier.belowFloor)
+    .map((tier) => ({
+      code: "TIER_BELOW_FLOOR" as const,
+      message: `${tier.label} rate ${money(tier.perUser)}/user is below the ${money(inputs.perUserFloor)}/user floor — floor rate applied`,
+    }));
 }
 
 export interface PricingModelAdapter<S extends ModelSettings> {

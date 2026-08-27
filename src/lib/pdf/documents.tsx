@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { Document, Image, Page, Text, View, type DocumentProps } from "@react-pdf/renderer";
-import type { CalcResult, Tier } from "@/lib/pricing/engine";
-import { money, moneyRounded } from "@/lib/pricing/engine";
+import type { CalcResult } from "@/lib/pricing/engine";
+import { includedLines, money, moneyRounded, tierResultFor } from "@/lib/pricing/engine";
 import { approvalLabel, type StampInfo } from "./stamp";
 import { brand, styles } from "./theme";
 
@@ -12,7 +12,6 @@ export type DocType = "QUOTE" | "COGS";
 /** Everything a workspace controls about how its documents read. */
 export interface DocWorkspace {
   name: string;
-  tierLabels: Record<Tier, string>;
   footer?: string | null;
   /** Workspace accent colour; falls back to the product orange. */
   accentColor?: string | null;
@@ -20,7 +19,8 @@ export interface DocWorkspace {
 
 export interface DocProps {
   result: CalcResult;
-  tier: Tier;
+  /** ServiceTier.key of the offering the document is written for. */
+  tierKey: string;
   clientName: string;
   notes?: string | null;
   stamp: StampInfo;
@@ -123,11 +123,11 @@ export function buildDocument(docType: DocType, props: DocProps): ReactElement<D
   return element as unknown as ReactElement<DocumentProps>;
 }
 
-export function QuoteDocument({ result, tier, clientName, notes, stamp, workspace, logo }: DocProps) {
-  const t = tier === "PINNACLE" ? result.pinnacle : result.advantage;
-  const other = tier === "PINNACLE" ? result.advantage : result.pinnacle;
-  const tierName = workspace.tierLabels[tier];
-  const otherName = workspace.tierLabels[tier === "PINNACLE" ? "ADVANTAGE" : "PINNACLE"];
+export function QuoteDocument({ result, tierKey, clientName, notes, stamp, workspace, logo }: DocProps) {
+  const t = tierResultFor(result, tierKey);
+  const tierName = t.label;
+  const lower = result.tiers[t.index - 1];
+  const others = result.tiers.filter((tier) => tier.key !== t.key);
   const pending = stamp.approvalState === "PENDING_APPROVAL";
   const accent = workspace.accentColor ?? brand.orange;
 
@@ -168,15 +168,15 @@ export function QuoteDocument({ result, tier, clientName, notes, stamp, workspac
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>WHAT IS INCLUDED</Text>
-          {tier === "PINNACLE" ? (
+          {lower ? (
             <>
               <Text>
-                Everything in {workspace.tierLabels.ADVANTAGE} — 24/7 monitoring and remediation, patching,
-                endpoint protection, email security, vulnerability management, network monitoring, and
-                unlimited remote support — plus the {workspace.tierLabels.PINNACLE} security stack:
+                Everything in {lower.label} — 24/7 monitoring and remediation, patching, endpoint
+                protection, email security, vulnerability management, network monitoring, and unlimited
+                remote support — plus what {tierName} adds:
               </Text>
               <View style={{ marginTop: 6 }}>
-                {result.pinnacle.lines.map((l) => (
+                {t.lines.map((l) => (
                   <View key={l.key} style={styles.row}>
                     <Text>{l.label}</Text>
                     <Text style={styles.rowMuted}>{UNIT_LABEL[l.unit]}</Text>
@@ -193,18 +193,28 @@ export function QuoteDocument({ result, tier, clientName, notes, stamp, workspac
           )}
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>ALTERNATIVE TIER</Text>
-          <View style={styles.row}>
-            <Text>{otherName}</Text>
-            <Text>
-              {moneyRounded(other.headlineRate)} / month · {money(other.headlinePerUser)} per user
+        {others.length ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>
+              {others.length === 1 ? "ALTERNATIVE OFFERING" : "ALTERNATIVE OFFERINGS"}
             </Text>
+            {others.map((other) => (
+              <View key={other.key}>
+                <View style={styles.row}>
+                  <Text>{other.label}</Text>
+                  <Text>
+                    {moneyRounded(other.headlineRate)} / month · {money(other.headlinePerUser)} per user
+                  </Text>
+                </View>
+                <Text style={[styles.rowMuted, { marginTop: 2 }]}>
+                  {other.index > t.index ? "+" : "−"}
+                  {moneyRounded(Math.abs(other.headlineRate - t.headlineRate))} per month against {tierName}
+                  .
+                </Text>
+              </View>
+            ))}
           </View>
-          <Text style={[styles.rowMuted, { marginTop: 4 }]}>
-            Difference of {moneyRounded(Math.abs(result.delta.discountedRate))} per month between tiers.
-          </Text>
-        </View>
+        ) : null}
 
         {result.bundle.discountPct > 0 ? (
           <View style={styles.section}>
@@ -237,10 +247,13 @@ export function QuoteDocument({ result, tier, clientName, notes, stamp, workspac
   );
 }
 
-export function CogsDocument({ result, tier, clientName, notes, stamp, workspace, logo }: DocProps) {
-  const t = tier === "PINNACLE" ? result.pinnacle : result.advantage;
-  const tierName = workspace.tierLabels[tier];
-  const lines = tier === "PINNACLE" ? [...result.advantage.lines, ...result.pinnacle.lines] : result.advantage.lines;
+export function CogsDocument({ result, tierKey, clientName, notes, stamp, workspace, logo }: DocProps) {
+  const t = tierResultFor(result, tierKey);
+  const tierName = t.label;
+  // Cumulative: the selected offering carries every lower offering's items too.
+  const lines = includedLines(result, t.key);
+  const baseKey = result.tiers[0]?.key;
+  const tierLabel = (key: string) => result.tiers.find((tier) => tier.key === key)?.label ?? key;
 
   return (
     <Document
@@ -277,10 +290,10 @@ export function CogsDocument({ result, tier, clientName, notes, stamp, workspace
               <Text style={{ width: "16%", textAlign: "right" }}>MONTHLY</Text>
             </View>
             {lines.map((l) => (
-              <View key={`${l.tier}-${l.key}`} style={styles.td}>
+              <View key={`${l.tierKey}-${l.key}`} style={styles.td}>
                 <Text style={{ width: "38%" }}>
                   {l.label}
-                  {l.tier === "PINNACLE" ? ` (${workspace.tierLabels.PINNACLE} add-on)` : ""}
+                  {l.tierKey === baseKey ? "" : ` (${tierLabel(l.tierKey)} add-on)`}
                 </Text>
                 <Text style={{ width: "20%", color: brand.slate }}>{UNIT_LABEL[l.unit]}</Text>
                 <Text style={{ width: "14%", textAlign: "right" }}>{money(l.unitCost)}</Text>

@@ -20,17 +20,27 @@ export const SEED_COST_PLUS_SETTINGS = {
   addonMultiplier: 4.83,
 };
 
+/**
+ * Offerings a new workspace starts with. Ordered: the first is the base tier
+ * everything is built on, the rest add to it. An admin can rename these, add
+ * more, or drop back to one while the version is still a draft.
+ */
+export const SEED_SERVICE_TIERS = [
+  { key: "advantage", label: "Advantage", description: "Core managed services" },
+  { key: "pinnacle", label: "Pinnacle", description: "Adds the security stack" },
+] as const;
+
 export const SEED_COGS_ITEMS = [
-  { key: "k365", label: "K365 Endpoint", vendor: "Datto RMM + SOC", unit: "DEVICE", tier: "ADVANTAGE", unitCost: 3.49 },
-  { key: "edr", label: "EDR", vendor: "SentinelOne", unit: "DEVICE", tier: "ADVANTAGE", unitCost: 2.85 },
-  { key: "pam", label: "Privilege management", vendor: "AutoElevate", unit: "DEVICE", tier: "ADVANTAGE", unitCost: 1.71 },
-  { key: "spam", label: "Spam + email filtering", vendor: "Avanan", unit: "USER", tier: "ADVANTAGE", unitCost: 1.5 },
-  { key: "vuln", label: "Vulnerability monitoring", vendor: "ConnectSecure", unit: "DEVICE", tier: "ADVANTAGE", unitCost: 0.15 },
-  { key: "net", label: "Network monitoring", vendor: "Domotz", unit: "LOCATION", tier: "ADVANTAGE", unitCost: 23 },
-  { key: "mfa", label: "MFA", vendor: "Duo", unit: "USER", tier: "PINNACLE", unitCost: 3 },
-  { key: "m365", label: "M365 Backup", vendor: "DropSuite", unit: "USER", tier: "PINNACLE", unitCost: 3 },
-  { key: "pw", label: "Password manager", vendor: "Keeper", unit: "USER", tier: "PINNACLE", unitCost: 2.25 },
-  { key: "sat", label: "Security awareness", vendor: "KnowBe4", unit: "USER", tier: "PINNACLE", unitCost: 1.5 },
+  { key: "k365", label: "K365 Endpoint", vendor: "Datto RMM + SOC", unit: "DEVICE", tierKey: "advantage", unitCost: 3.49 },
+  { key: "edr", label: "EDR", vendor: "SentinelOne", unit: "DEVICE", tierKey: "advantage", unitCost: 2.85 },
+  { key: "pam", label: "Privilege management", vendor: "AutoElevate", unit: "DEVICE", tierKey: "advantage", unitCost: 1.71 },
+  { key: "spam", label: "Spam + email filtering", vendor: "Avanan", unit: "USER", tierKey: "advantage", unitCost: 1.5 },
+  { key: "vuln", label: "Vulnerability monitoring", vendor: "ConnectSecure", unit: "DEVICE", tierKey: "advantage", unitCost: 0.15 },
+  { key: "net", label: "Network monitoring", vendor: "Domotz", unit: "LOCATION", tierKey: "advantage", unitCost: 23 },
+  { key: "mfa", label: "MFA", vendor: "Duo", unit: "USER", tierKey: "pinnacle", unitCost: 3 },
+  { key: "m365", label: "M365 Backup", vendor: "DropSuite", unit: "USER", tierKey: "pinnacle", unitCost: 3 },
+  { key: "pw", label: "Password manager", vendor: "Keeper", unit: "USER", tierKey: "pinnacle", unitCost: 2.25 },
+  { key: "sat", label: "Security awareness", vendor: "KnowBe4", unit: "USER", tierKey: "pinnacle", unitCost: 1.5 },
 ] as const;
 
 export const SEED_BUNDLES = [

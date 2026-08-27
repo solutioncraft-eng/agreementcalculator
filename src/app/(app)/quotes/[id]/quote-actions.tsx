@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import type { QuoteStatus, Tier } from "@prisma/client";
+import type { QuoteStatus } from "@prisma/client";
 import { downloadExport } from "@/lib/export-client";
 import { withdraw, type DecisionState } from "../../reviews/actions";
 
@@ -16,14 +16,14 @@ interface ExportRow {
 export function QuoteActions({
   quoteId,
   status,
-  tier,
+  tierKey,
   clientName,
   canWithdraw,
   exports,
 }: {
   quoteId: string;
   status: QuoteStatus;
-  tier: Tier;
+  tierKey: string;
   clientName: string;
   canWithdraw: boolean;
   exports: ExportRow[];
@@ -36,7 +36,7 @@ export function QuoteActions({
   async function runExport(docType: "QUOTE" | "COGS") {
     setError(null);
     setBusy(docType);
-    const message = await downloadExport({ docType, tier, clientName, quoteId });
+    const message = await downloadExport({ docType, tierKey, clientName, quoteId });
     setBusy(null);
     if (message) setError(message);
   }

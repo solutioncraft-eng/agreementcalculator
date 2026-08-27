@@ -1,19 +1,17 @@
 import Link from "next/link";
 import clsx from "clsx";
-import type { QuoteRequest, Tenant } from "@prisma/client";
+import type { QuoteRequest } from "@prisma/client";
 import { moneyRounded } from "@/lib/pricing/engine";
-import { STATUS_CLASS, STATUS_LABEL, formatUtc, tierName } from "@/lib/quotes";
+import { STATUS_CLASS, STATUS_LABEL, formatUtc, quoteTierName, storedTier } from "@/lib/quotes";
 
 type Row = QuoteRequest & { submittedBy?: { name: string } };
 
 export function QuoteTable({
   quotes,
-  tenant,
   hrefBase,
   showSubmitter,
 }: {
   quotes: Row[];
-  tenant: Pick<Tenant, "advantageLabel" | "pinnacleLabel">;
   hrefBase: string;
   showSubmitter?: boolean;
 }) {
@@ -25,7 +23,7 @@ export function QuoteTable({
             <th className="px-5 py-3">Reference</th>
             <th className="px-5 py-3">Client</th>
             {showSubmitter ? <th className="px-5 py-3">Submitted by</th> : null}
-            <th className="px-5 py-3">Tier</th>
+            <th className="px-5 py-3">Offering</th>
             <th className="px-5 py-3 text-right">Rate</th>
             <th className="px-5 py-3">Flags</th>
             <th className="px-5 py-3">Status</th>
@@ -34,9 +32,7 @@ export function QuoteTable({
         </thead>
         <tbody>
           {quotes.map((quote) => {
-            const rate = (
-              quote.requestedTier === "PINNACLE" ? quote.pinnacleRate : quote.advantageRate
-            ).toNumber();
+            const rate = storedTier(quote)?.rate ?? 0;
             return (
               <tr key={quote.id} className="border-b border-steel last:border-0 hover:bg-paper">
                 <td className="px-5 py-3 font-mono text-[12px]">
@@ -48,7 +44,7 @@ export function QuoteTable({
                 {showSubmitter ? (
                   <td className="px-5 py-3 text-slate">{quote.submittedBy?.name ?? "—"}</td>
                 ) : null}
-                <td className="px-5 py-3">{tierName(tenant, quote.requestedTier)}</td>
+                <td className="px-5 py-3">{quoteTierName(quote)}</td>
                 <td className="px-5 py-3 text-right font-medium">{moneyRounded(rate)}</td>
                 <td className="px-5 py-3 text-slate">{quote.triggers.length}</td>
                 <td className="px-5 py-3">

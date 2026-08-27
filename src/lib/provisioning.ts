@@ -3,7 +3,12 @@ import type { PricingModel, Tenant, User } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { hashPassword } from "@/lib/auth";
 import { PRICING_MODELS, settingsRecord } from "@/lib/pricing/models";
-import { SEED_BUNDLES, SEED_COGS_ITEMS, SEED_COST_BASIS } from "@/lib/pricing/defaults";
+import {
+  SEED_BUNDLES,
+  SEED_COGS_ITEMS,
+  SEED_COST_BASIS,
+  SEED_SERVICE_TIERS,
+} from "@/lib/pricing/defaults";
 
 export interface ProvisionInput {
   name: string;
@@ -90,6 +95,15 @@ export async function provisionWorkspace(input: ProvisionInput): Promise<Provisi
         settings: settingsRecord(model, PRICING_MODELS[model].defaults),
         notes: "Starting draft — review the costs, then publish.",
         createdById: input.draftCreatedById ?? admin.id,
+        // Offerings belong to the version, so the first draft carries the
+        // starting ladder even when the COGS catalogue is left empty.
+        serviceTiers: {
+          create: SEED_SERVICE_TIERS.map((tier, index) => ({
+            ...tier,
+            tenantId: tenant.id,
+            sortOrder: index,
+          })),
+        },
         cogsItems: input.seedCatalog
           ? {
               create: SEED_COGS_ITEMS.map((item, index) => ({

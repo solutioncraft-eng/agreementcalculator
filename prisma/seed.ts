@@ -11,6 +11,7 @@ import {
   SEED_COGS_ITEMS,
   SEED_COST_BASIS,
   SEED_COST_PLUS_SETTINGS,
+  SEED_SERVICE_TIERS,
   SEED_VERSION_LABEL,
 } from "../src/lib/pricing/defaults";
 
@@ -72,6 +73,15 @@ async function main() {
       notes: "Seeded starting pricing content.",
       model: "COST_PLUS",
       settings: SEED_COST_PLUS_SETTINGS,
+      serviceTiers: {
+        create: SEED_SERVICE_TIERS.map((tier, index) => ({
+          tenantId: tenant.id,
+          key: tier.key,
+          label: tier.label,
+          description: tier.description,
+          sortOrder: index,
+        })),
+      },
       cogsItems: {
         create: SEED_COGS_ITEMS.map((item, index) => ({
           tenantId: tenant.id,
@@ -79,7 +89,7 @@ async function main() {
           label: item.label,
           vendor: item.vendor,
           unit: item.unit,
-          tier: item.tier,
+          tierKey: item.tierKey,
           unitCost: item.unitCost,
           sortOrder: index * 10,
         })),

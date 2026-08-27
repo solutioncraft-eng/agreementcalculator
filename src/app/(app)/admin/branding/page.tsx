@@ -13,8 +13,10 @@ export default async function BrandingPage() {
         <p className="eyebrow">Administration</p>
         <h1 className="mt-2 text-[32px] leading-9">Branding</h1>
         <p className="mt-2 max-w-2xl text-slate">
-          Your logo, tier names and PDF footer. Typography and layout are the product&apos;s house style and
-          stay consistent for everyone, so agreements always read as professionally produced documents.
+          Your logo, accent colour and PDF footer. What you call your offerings belongs to a pricing
+          version, so it is edited there and frozen on publish. Typography and layout are the
+          product&apos;s house style and stay consistent for everyone, so agreements always read as
+          professionally produced documents.
         </p>
       </header>
 
@@ -25,8 +27,6 @@ export default async function BrandingPage() {
           logoUrl: tenant.logoUrl,
           accentColor: tenant.accentColor,
           pdfFooter: tenant.pdfFooter,
-          advantageLabel: tenant.advantageLabel,
-          pinnacleLabel: tenant.pinnacleLabel,
         }}
         uploadsConfigured={uploadsConfigured}
       />

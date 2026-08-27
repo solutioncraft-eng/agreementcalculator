@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 export default async function ReviewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { role, tenant, db } = await requireTenant();
+  const { role, db } = await requireTenant();
   if (!canReview(role)) forbidden();
 
   const quote = await db.quoteRequest.findUnique({
@@ -27,7 +27,7 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
       <Link href="/reviews" className="text-[13px] font-medium text-slate hover:text-orange">
         ← Review queue
       </Link>
-      <QuoteDetail quote={quote} tenant={tenant} db={db} />
+      <QuoteDetail quote={quote} db={db} />
       <DecisionForm quoteId={quote.id} status={quote.status} />
     </div>
   );

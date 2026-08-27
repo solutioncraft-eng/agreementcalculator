@@ -4,6 +4,7 @@ import {
   SEED_COGS_ITEMS,
   SEED_COST_BASIS,
   SEED_COST_PLUS_SETTINGS,
+  SEED_SERVICE_TIERS,
   SEED_VERSION_LABEL,
 } from "@/lib/pricing/defaults";
 
@@ -19,7 +20,7 @@ export function seedConfig(): PricingConfig {
     costBasis: SEED_COST_BASIS,
     model: "COST_PLUS",
     settings: SEED_COST_PLUS_SETTINGS,
-    tierLabels: { ADVANTAGE: "Advantage", PINNACLE: "Pinnacle" },
+    tiers: SEED_SERVICE_TIERS.map((tier, index) => ({ ...tier, sortOrder: index })),
     items: SEED_COGS_ITEMS.map((item, index) => ({ ...item, sortOrder: index })),
     bundles: [NO_BUNDLE, ...SEED_BUNDLES.map((bundle, index) => ({ ...bundle, sortOrder: index + 1 }))],
   };

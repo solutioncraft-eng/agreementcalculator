@@ -1,8 +1,9 @@
-import type { CalcInputs, Tier } from "@/lib/pricing/engine";
+import type { CalcInputs } from "@/lib/pricing/engine";
 
 export interface ExportRequest {
   docType: "QUOTE" | "COGS";
-  tier: Tier;
+  /** ServiceTier.key of the offering being exported. */
+  tierKey: string;
   clientName: string;
   notes?: string;
   inputs?: CalcInputs;
