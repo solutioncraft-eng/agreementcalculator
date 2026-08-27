@@ -137,11 +137,29 @@ model User {
 
   memberships      Membership[]
   auditEvents      AuditEvent[]
+  resetTokens      PasswordResetToken[]
   quoteRequests    QuoteRequest[]   @relation("submitter")
   reviews          QuoteReview[]
   exports          ExportRecord[]
   publishedVersion PricingVersion[] @relation("publisher")
   createdVersions  PricingVersion[] @relation("creator")
+}
+
+/// A single-use link that lets someone who cannot sign in choose a new
+/// password. Only the SHA-256 of the token is stored, so a leaked database row
+/// cannot be replayed as a reset link. Rows are product-level: an account is
+/// global, and someone locked out of it has no workspace context yet.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model Membership {

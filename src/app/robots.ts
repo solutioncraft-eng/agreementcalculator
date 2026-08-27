@@ -20,6 +20,8 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
         allow: ["/", "/signup"],
         disallow: [
           "/login",
+          "/forgot-password",
+          "/reset-password",
           "/calculator",
           "/quotes",
           "/reviews",

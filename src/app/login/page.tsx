@@ -6,8 +6,13 @@ import { TRIAL_DAYS } from "@/lib/trial";
 import { Logo, LogoMark } from "@/components/logo";
 import { LoginForm } from "./login-form";
 
-export default async function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ reset?: string }>;
+}) {
   if (await getCurrentUser()) redirect("/calculator");
+  const justReset = (await searchParams).reset === "1";
   // Signing up creates a workspace, so it is offered on the product's own
   // hostname only — a workspace subdomain already belongs to one.
   const onWorkspaceHost = Boolean(await slugFromHost());
@@ -41,6 +46,11 @@ export default async function LoginPage() {
             Agreement Calculator
           </h2>
           <p className="mt-2 text-slate">Accounts are provisioned by your workspace administrator.</p>
+          {justReset ? (
+            <p role="status" className="mt-4 rounded-brand bg-navy/5 px-3 py-2 text-[13px] text-navy">
+              Your password has been updated. Sign in with it now.
+            </p>
+          ) : null}
           <LoginForm />
           {onWorkspaceHost ? null : (
             <p className="mt-6 border-t border-mist pt-4 text-[13px] text-slate">
