@@ -258,9 +258,15 @@ export function VersionEditor({
             <li className="text-slate">No offerings yet — add at least one before publishing.</li>
           ) : null}
         </ol>
-        <Feedback state={tierState} />
-        <Feedback state={tierMoveState} />
-        <Feedback state={tierDeleteState} />
+        {/* Publishing leaves the last attempt's message behind, and it can only
+            mislead once the ladder is frozen. */}
+        {editable ? (
+          <>
+            <Feedback state={tierState} />
+            <Feedback state={tierMoveState} />
+            <Feedback state={tierDeleteState} />
+          </>
+        ) : null}
 
         {editable ? (
           <div className="mt-6 border-t border-mist pt-5">
