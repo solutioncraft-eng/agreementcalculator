@@ -107,6 +107,23 @@ model Tenant {
   /// Months a submitted quote is retained before purge.
   retentionMonths Int @default(12)
 
+  // ── Billing ──────────────────────────────────────────────────────
+  /// Stripe customer and subscription for this workspace. Written only by the
+  /// checkout redirect and the Stripe webhook; Stripe stays the authority on
+  /// `subscriptionStatus` and `currentPeriodEnd`.
+  stripeCustomerId     String? @unique
+  stripeSubscriptionId String? @unique
+
+  /// Raw Stripe subscription status (`active`, `past_due`, `canceled`, …).
+  /// Null before the workspace has ever subscribed.
+  subscriptionStatus String?
+
+  currentPeriodEnd DateTime?
+
+  /// While a payment is failing, how long the workspace keeps working. Set
+  /// from `invoice.payment_failed`, cleared once Stripe reports it healthy.
+  graceEndsAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

@@ -2,7 +2,7 @@ import { prisma } from "@/lib/db";
 import { requireSuperAdmin } from "@/lib/auth";
 import { PRICING_MODELS } from "@/lib/pricing/models";
 import { formatUtc } from "@/lib/quotes";
-import { describeDaysLeft, trialInfo } from "@/lib/trial";
+import { describeAccess, workspaceAccess } from "@/lib/billing";
 import { CreateTenantForm } from "./create-tenant-form";
 import { TenantRow } from "./tenant-row";
 
@@ -80,7 +80,7 @@ export default async function SuperPage() {
       <section className="space-y-3">
         {tenants.map((tenant) => {
           const published = tenant.pricingVersions[0];
-          const trial = trialInfo(tenant);
+          const access = workspaceAccess(tenant);
           return (
             <TenantRow
               key={tenant.id}
@@ -90,11 +90,9 @@ export default async function SuperPage() {
                 name: tenant.name,
                 slug: tenant.slug,
                 status: tenant.status,
-                trial: trial.expired
-                  ? `expired ${tenant.trialEndsAt ? formatUtc(tenant.trialEndsAt) : ""}`.trim()
-                  : trial.onTrial
-                    ? `${describeDaysLeft(trial.daysLeft)} · ends ${formatUtc(trial.endsAt as Date)}`
-                    : null,
+                billing: access.deadline
+                  ? `${describeAccess(access)} · ${formatUtc(access.deadline)}`
+                  : describeAccess(access),
                 pricingModel: tenant.pricingModel,
                 pricingModelLabel: PRICING_MODELS[tenant.pricingModel].label,
                 createdAt: formatUtc(tenant.createdAt),

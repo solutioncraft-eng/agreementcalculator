@@ -113,6 +113,31 @@ Logo uploads need object storage, since the filesystem is read-only on Vercel: s
 `SUPABASE_SERVICE_ROLE_KEY` and `SUPABASE_LOGO_BUCKET` (a public bucket). Without them administrators can
 still point branding at an image URL they host. Workspaces with no logo fall back to their own name.
 
+## Trials and billing
+
+A self-serve signup starts a 14-day trial with no card. After that a workspace needs one of three things to
+keep working: a healthy Stripe subscription ($69/month per company, unlimited people), a failed payment still
+inside its 7-day grace window, or `ACTIVE` status set by an operator in `/super` (the comp override). Anything
+else lands at `/trial-ended`, which offers Checkout to administrators. `src/lib/billing.ts` decides this and
+is the only place that judgement lives; `/api/export` re-checks it, because a direct API call never passes
+through a page.
+
+Stripe hosts both the card form (Checkout) and everything afterwards (billing portal: card changes, invoices,
+cancellation), so no card data reaches this application. `/api/stripe/webhook` is the **only** writer of
+subscription state — the return from Checkout records nothing, so an abandoned payment or a card that fails
+after the redirect cannot leave a workspace looking paid. It verifies Stripe's signature over the raw body and
+handles `checkout.session.completed`, `customer.subscription.created/updated/deleted` and
+`invoice.payment_failed`; the grace deadline is set from the first failure and only Stripe reporting the
+subscription healthy clears it.
+
+Set `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID` and `STRIPE_WEBHOOK_SECRET`. With any of them unset the paywall is
+inert — trials and operator activation keep working and the Subscribe button says card payment is not switched
+on — so a local or preview deployment needs no Stripe account. Locally:
+
+```bash
+stripe listen --forward-to localhost:3000/api/stripe/webhook   # prints the whsec_… to use
+```
+
 ## PDF stamping
 
 PDFs are rendered server-side. Every page footer carries the export ID (`EX-YYYYMMDD-XXXXXX`), the UTC
@@ -174,6 +199,7 @@ accounts carrying a temporary password are sent there until they do.
 | `EMAIL_FROM`                          | no       | From-address for notifications                               |
 | `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` / `SUPABASE_LOGO_BUCKET` | no | Logo uploads; without them, hosted image URLs still work |
 | `SMTP_HOST` / `_PORT` / `_USER` / `_PASSWORD` / `_FROM` | no | SMTP fallback, used only when `RESEND_API_KEY` is unset |
+| `STRIPE_SECRET_KEY` / `STRIPE_PRICE_ID` / `STRIPE_WEBHOOK_SECRET` | no | Subscription billing; without all three the paywall is inert |
 
 ### Scripts
 
