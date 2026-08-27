@@ -139,6 +139,25 @@ test("the per-user floor is enforced per offering and names the offering it lift
   assert.equal(result.needsApproval, true);
 });
 
+test("the upgrade step follows the headline rate, so a shared floor shows no step", () => {
+  const config = configFor(ladder("Core", "Plus", "Elite"));
+  // A floor above both Core ($8/user) and Plus ($12/user) collapses them onto it.
+  const result = calculate(config, { ...INPUTS, perUserFloor: 13 });
+
+  assert.deepEqual(
+    result.tiers.map((tier) => tier.headlineRate),
+    [130, 130, 160],
+  );
+  assert.deepEqual(
+    result.deltas.map((delta) => [delta.headlineRate, delta.discountedRate]),
+    [
+      // No upgrade price at all, though the un-floored rates differ by 40.
+      [0, 40],
+      [30, 40],
+    ],
+  );
+});
+
 test("an unknown offering key falls back to the base offering rather than crashing", () => {
   const result = calculate(configFor(ladder("Core", "Plus")), INPUTS);
   assert.equal(tierResultFor(result, "gone").key, "core");

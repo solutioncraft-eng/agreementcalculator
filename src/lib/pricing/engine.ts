@@ -166,6 +166,13 @@ export interface TierDelta {
   standardRate: number;
   discountedRate: number;
   perUser: number;
+  /**
+   * The step between the two headline rates — what the client actually pays to
+   * move up. Zero when both offerings sit on the per-user floor, so anything
+   * quoting an upgrade price must use this rather than `discountedRate`.
+   */
+  headlineRate: number;
+  headlinePerUser: number;
 }
 
 export interface CalcResult {
@@ -337,6 +344,8 @@ export function priceTiers(
       standardRate: tier.standardRate - previous.standardRate,
       discountedRate: tier.discountedRate - previous.discountedRate,
       perUser: (tier.discountedRate - previous.discountedRate) / users,
+      headlineRate: tier.headlineRate - previous.headlineRate,
+      headlinePerUser: (tier.headlineRate - previous.headlineRate) / users,
     };
   });
 

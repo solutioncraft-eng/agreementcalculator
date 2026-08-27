@@ -302,7 +302,9 @@ export function CalculatorClient({
                   onSelect={() => setTierKey(tierResult.key)}
                   footnote={
                     step && previous
-                      ? `+${moneyRounded(step.discountedRate)}/mo over ${previous.label}`
+                      ? step.headlineRate > 0.5
+                        ? `+${moneyRounded(step.headlineRate)}/mo over ${previous.label}`
+                        : `Same rate as ${previous.label} at this floor`
                       : undefined
                   }
                 />
