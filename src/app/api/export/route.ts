@@ -14,7 +14,7 @@ import {
 import { newExportId, renderPdf, workspaceLogo } from "@/lib/pdf/render";
 import { exportPayloadSchema } from "@/lib/schemas";
 import { APP_VERSION_STAMP } from "@/lib/version";
-import { trialInfo } from "@/lib/trial";
+import { workspaceAccess } from "@/lib/billing";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,10 +27,11 @@ export async function POST(request: Request) {
   const session = await getTenantSession();
   if (!session) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   const { user, role, tenant, db } = session;
-  // Pages go through requireTenant, which redirects an expired trial; this route
-  // reads the session directly, so it has to say no for itself.
-  if (trialInfo(tenant).expired) {
-    return NextResponse.json({ error: "This workspace's trial has ended" }, { status: 403 });
+  // Pages go through requireTenant, which redirects a workspace with no
+  // entitlement left; this route reads the session directly, so it has to say
+  // no for itself.
+  if (!workspaceAccess(tenant).allowed) {
+    return NextResponse.json({ error: "This workspace is not active" }, { status: 403 });
   }
 
   const form = await request.formData();

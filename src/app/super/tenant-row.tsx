@@ -10,8 +10,8 @@ interface Row {
   name: string;
   slug: string;
   status: TenantStatus;
-  /** Where the workspace stands in its trial, or null when it has no deadline. */
-  trial: string | null;
+  /** What the workspace is running on: trial, subscription, or comp. */
+  billing: string;
   pricingModel: string;
   pricingModelLabel: string;
   createdAt: string;
@@ -51,7 +51,7 @@ export function TenantRow({ tenant, models }: { tenant: Row; models: PricingMode
           </div>
           <p className="mt-1 font-mono text-[12px] text-slate">
             {tenant.slug} · {tenant.pricingModelLabel} · created {tenant.createdAt}
-            {tenant.trial ? ` · trial ${tenant.trial}` : null}
+            {` · ${tenant.billing}`}
           </p>
         </div>
 
