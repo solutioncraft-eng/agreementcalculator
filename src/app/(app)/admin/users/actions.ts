@@ -1,32 +1,23 @@
 "use server";
 
-import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import type { Role } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { hashPassword, requireRole } from "@/lib/auth";
-import { appUrl, sendMail, type MailResult } from "@/lib/email";
+import {
+  handoverMessage,
+  issueTemporaryPassword,
+  temporaryPassword,
+} from "@/lib/credentials";
+import { appUrl, sendMail } from "@/lib/email";
 
 export interface UserState {
   error?: string;
   ok?: string;
   /// Shown once, when the email could not be delivered and the admin must hand it over.
   tempPassword?: string;
-}
-
-/**
- * Turns a failed send into an explanation the admin can act on — a rejected
- * message (unverified sending domain, bad address) reads very differently from
- * an unconfigured mailer.
- */
-function handoverMessage(result: MailResult, email: string): string {
-  if (result.sent) return "";
-  if (result.reason === "unconfigured") {
-    return `Email is not configured — hand this temporary password to ${email} securely.`;
-  }
-  return `Email to ${email} was rejected${result.detail ? `: ${result.detail}` : "."} Hand this temporary password over securely.`;
 }
 
 const roleSchema = z.enum(["ADMIN", "LEADER", "AM"]);
@@ -36,10 +27,6 @@ const inviteSchema = z.object({
   name: z.string().trim().min(2).max(80),
   role: roleSchema,
 });
-
-function tempPassword(): string {
-  return randomBytes(9).toString("base64url");
-}
 
 /**
  * Invites someone into this workspace. Accounts are global and identified by
@@ -62,14 +49,14 @@ export async function inviteMember(_prev: UserState, formData: FormData): Promis
   });
   if (existing?.memberships.length) return { error: `${email} is already in ${tenant.name}.` };
 
-  const password = existing ? null : tempPassword();
+  const password = existing ? null : temporaryPassword();
   const account =
     existing ??
     (await prisma.user.create({
       data: {
         email,
         name,
-        passwordHash: await hashPassword(password ?? tempPassword()),
+        passwordHash: await hashPassword(password ?? temporaryPassword()),
         mustReset: true,
       },
     }));
@@ -185,11 +172,7 @@ export async function resendWelcome(_prev: UserState, formData: FormData): Promi
   if ("error" in found) return { error: found.error };
   const { user } = found.membership;
 
-  const password = tempPassword();
-  await prisma.user.update({
-    where: { id: userId },
-    data: { passwordHash: await hashPassword(password), mustReset: true },
-  });
+  const password = await issueTemporaryPassword(userId);
 
   await audit({
     action: "WELCOME_EMAIL_RESENT",
@@ -226,11 +209,7 @@ export async function resetPassword(_prev: UserState, formData: FormData): Promi
   if ("error" in found) return { error: found.error };
   const { user } = found.membership;
 
-  const password = tempPassword();
-  await prisma.user.update({
-    where: { id: userId },
-    data: { passwordHash: await hashPassword(password), mustReset: true },
-  });
+  const password = await issueTemporaryPassword(userId);
 
   await audit({
     action: "PASSWORD_CHANGED",

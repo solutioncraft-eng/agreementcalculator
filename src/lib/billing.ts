@@ -26,9 +26,12 @@ export interface BillingTenant {
   subscriptionStatus: string | null;
   currentPeriodEnd: Date | null;
   graceEndsAt: Date | null;
+  compExpiresAt: Date | null;
 }
 
 export type AccessReason =
+  /** Comped by an operator: partner, internal, or goodwill. Never billed. */
+  | "COMPLIMENTARY"
   /** Paid subscription in good standing. */
   | "SUBSCRIBED"
   /** Paid subscription with a failed payment, inside the grace window. */
@@ -41,7 +44,9 @@ export type AccessReason =
   /** Grace window ran out with the payment still failing. */
   | "PAYMENT_FAILED"
   /** Subscription was cancelled or never completed, and no trial is left. */
-  | "SUBSCRIPTION_ENDED";
+  | "SUBSCRIPTION_ENDED"
+  /** A comp with an expiry date reached it without anything replacing it. */
+  | "COMPLIMENTARY_ENDED";
 
 export interface WorkspaceAccess {
   /** Whether the workspace may be used at all. */
@@ -55,9 +60,9 @@ export interface WorkspaceAccess {
 /**
  * Whether a workspace may be used, and why.
  *
- * Subscription state wins over the trial, because a workspace that subscribes
- * mid-trial must not be cut off when the original deadline passes; the operator
- * `ACTIVE` flag stays as a comp override for workspaces billed outside Stripe.
+ * An operator comp wins over everything, then subscription state over the trial
+ * — a workspace that subscribes mid-trial must not be cut off when the original
+ * deadline passes. `ACTIVE` remains the older "switched on by hand" flag.
  * Nothing here talks to Stripe — the webhook is what keeps the stored fields
  * true, so this stays a pure function of the row and can be reasoned about (and
  * tested) on its own.
@@ -68,6 +73,15 @@ export function workspaceAccess(
 ): WorkspaceAccess {
   const trial = trialInfo(tenant, now);
   const status = tenant.subscriptionStatus;
+
+  // A comp outranks Stripe: an operator granting one is a decision about the
+  // relationship, and it must hold even if a card on file has since failed.
+  if (tenant.status === "COMPLIMENTARY") {
+    const expiresAt = tenant.compExpiresAt;
+    if (!expiresAt || expiresAt.getTime() > now.getTime()) {
+      return { allowed: true, reason: "COMPLIMENTARY", trial, deadline: expiresAt };
+    }
+  }
 
   if (status && HEALTHY.has(status)) {
     return { allowed: true, reason: "SUBSCRIBED", trial, deadline: tenant.currentPeriodEnd };
@@ -83,6 +97,17 @@ export function workspaceAccess(
 
   if (tenant.status === "ACTIVE") {
     return { allowed: true, reason: "ACTIVATED", trial, deadline: null };
+  }
+
+  // Reached only when the comp carried an expiry date and it has passed, since
+  // an open-ended comp returns above.
+  if (tenant.status === "COMPLIMENTARY") {
+    return {
+      allowed: false,
+      reason: "COMPLIMENTARY_ENDED",
+      trial,
+      deadline: tenant.compExpiresAt,
+    };
   }
 
   if (trial.expired) {
@@ -132,6 +157,8 @@ export function subscriptionUpdate(snapshot: SubscriptionSnapshot): Subscription
 
 export function describeAccess(access: WorkspaceAccess): string {
   switch (access.reason) {
+    case "COMPLIMENTARY":
+      return "Complimentary";
     case "SUBSCRIBED":
       return "Subscribed";
     case "IN_GRACE":
@@ -146,5 +173,7 @@ export function describeAccess(access: WorkspaceAccess): string {
       return "Suspended for non-payment";
     case "SUBSCRIPTION_ENDED":
       return "Subscription ended";
+    case "COMPLIMENTARY_ENDED":
+      return "Complimentary period ended";
   }
 }

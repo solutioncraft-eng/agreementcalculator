@@ -4,6 +4,7 @@ import { PRICING_MODELS } from "@/lib/pricing/models";
 import { formatUtc } from "@/lib/quotes";
 import { describeAccess, workspaceAccess } from "@/lib/billing";
 import { CreateTenantForm } from "./create-tenant-form";
+import { PeopleDirectory } from "./people-directory";
 import { TenantRow } from "./tenant-row";
 
 export const dynamic = "force-dynamic";
@@ -37,6 +38,42 @@ export default async function SuperPage() {
   const lastActivity = new Map(
     lastEvents.filter((row) => row.tenantId).map((row) => [row.tenantId as string, row._max.createdAt]),
   );
+
+  // Every account on the product, whichever workspaces they belong to — an
+  // account with no membership is an invitation that was never completed, and is
+  // exactly the kind of thing an operator is asked to fix.
+  const accounts = await prisma.user.findMany({
+    orderBy: { email: "asc" },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      isSuperAdmin: true,
+      mustReset: true,
+      lastLoginAt: true,
+      createdAt: true,
+      memberships: {
+        orderBy: { createdAt: "asc" },
+        select: { role: true, tenant: { select: { name: true, slug: true, status: true } } },
+      },
+    },
+  });
+
+  const people = accounts.map((account) => ({
+    id: account.id,
+    email: account.email,
+    name: account.name,
+    isSuperAdmin: account.isSuperAdmin,
+    mustReset: account.mustReset,
+    lastLogin: account.lastLoginAt ? formatUtc(account.lastLoginAt) : null,
+    createdAt: formatUtc(account.createdAt),
+    workspaces: account.memberships.map((membership) => ({
+      name: membership.tenant.name,
+      slug: membership.tenant.slug,
+      role: membership.role,
+      suspended: membership.tenant.status === "SUSPENDED",
+    })),
+  }));
 
   const models = Object.entries(PRICING_MODELS).map(([key, model]) => ({
     key,
@@ -93,6 +130,8 @@ export default async function SuperPage() {
                 billing: access.deadline
                   ? `${describeAccess(access)} · ${formatUtc(access.deadline)}`
                   : describeAccess(access),
+                compReason: tenant.compReason,
+                hasSubscription: Boolean(tenant.stripeSubscriptionId),
                 pricingModel: tenant.pricingModel,
                 pricingModelLabel: PRICING_MODELS[tenant.pricingModel].label,
                 createdAt: formatUtc(tenant.createdAt),
@@ -113,6 +152,8 @@ export default async function SuperPage() {
           <p className="card text-slate">No workspaces yet — create the first one below.</p>
         ) : null}
       </section>
+
+      <PeopleDirectory people={people} />
 
       <CreateTenantForm models={models} />
     </div>

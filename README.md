@@ -38,8 +38,18 @@ wins over the session's workspace, so a link into a specific workspace behaves a
 ### Operator portal
 
 `/super` is for `User.isSuperAdmin` only: create a workspace with its first administrator, suspend or
-reinstate one, change which pricing model it uses. It reports counts, pricing version labels and timestamps —
-**never quote contents or COGS costs**, which are the workspace's confidential pricing.
+reinstate one, change which pricing model it uses, and run the billing levers below. It also lists every
+account on the product with the workspaces and roles it holds — including accounts with no membership at all,
+which is where an invitation that was never completed ends up — and can issue a fresh temporary password to
+any of them, either as a password reset or as a re-sent welcome. Both email the password and show it to the
+operator, because a bounced message must not leave someone locked out mid-call, and both force a change at the
+next sign-in. It reports counts, pricing version labels and timestamps — **never quote contents or COGS
+costs**, which are the workspace's confidential pricing.
+
+Billing actions, all audited with the operator as actor: make a workspace complimentary (with a reason and an
+optional end date) or end that comp, reset the 14-day trial from today, extend the failed-payment grace window,
+and cancel a subscription either immediately or at the end of the period. Cancellation is executed in Stripe
+and recorded by the resulting webhook, so Stripe stays the single authority even when the operator started it.
 
 ## Roles
 
@@ -116,8 +126,8 @@ still point branding at an image URL they host. Workspaces with no logo fall bac
 ## Trials and billing
 
 A self-serve signup starts a 14-day trial with no card. After that a workspace needs one of three things to
-keep working: a healthy Stripe subscription ($69/month per company, unlimited people), a failed payment still
-inside its 7-day grace window, or `ACTIVE` status set by an operator in `/super` (the comp override). Anything
+keep working: `COMPLIMENTARY` status, a healthy Stripe subscription ($69/month per company, unlimited people),
+a failed payment still inside its 7-day grace window, or the older `ACTIVE` status set by hand. Anything
 else lands at `/trial-ended`, which offers Checkout to administrators. `src/lib/billing.ts` decides this and
 is the only place that judgement lives; `/api/export` re-checks it, because a direct API call never passes
 through a page.
@@ -129,6 +139,13 @@ after the redirect cannot leave a workspace looking paid. It verifies Stripe's s
 handles `checkout.session.completed`, `customer.subscription.created/updated/deleted` and
 `invoice.payment_failed`; the grace deadline is set from the first failure and only Stripe reporting the
 subscription healthy clears it.
+
+`COMPLIMENTARY` outranks everything, including a failing card: a comp is a decision about the relationship, not
+about an invoice. Granting one deliberately leaves any Stripe subscription alone — `/super` warns when a comped
+workspace still has a live one, because Stripe will otherwise keep charging it — and the status is kept apart
+from `ACTIVE` so a comped workspace is never counted as revenue. Resetting a trial clears a lapsed
+subscription's state (keeping the Stripe customer, so invoice history survives) and is refused while a
+subscription is live.
 
 Set `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID` and `STRIPE_WEBHOOK_SECRET`. With any of them unset the paywall is
 inert — trials and operator activation keep working and the Subscribe button says card payment is not switched
