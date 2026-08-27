@@ -228,7 +228,10 @@ SELECT has_table_privilege('anon', 'public."CogsItem"', 'SELECT');  -- must be f
 
 ### General
 
-- Run `npm run db:migrate` on release and set `APP_BUILD` to the commit sha so PDF stamps identify the build.
+- On Vercel, `vercel-build` runs `prisma migrate deploy` before `next build`, so a release applies its own
+  migrations. It is a no-op unless `VERCEL_ENV=production` and both connection strings are set, so preview
+  builds never touch the production database. Elsewhere, run `npm run db:migrate` on release.
+- Set `APP_BUILD` to the commit sha so PDF stamps identify the build.
 - Schedule `npm run db:purge` (daily is plenty) to honour quote retention.
 - Sessions are httpOnly cookies, `Secure` in production, and expire after 10 hours.
 - The app is `noindex, nofollow` until the marketing site exists.
