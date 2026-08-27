@@ -10,8 +10,6 @@ interface Branding {
   logoUrl: string | null;
   accentColor: string | null;
   pdfFooter: string | null;
-  advantageLabel: string;
-  pinnacleLabel: string;
 }
 
 export function BrandingForm({
@@ -67,40 +65,6 @@ export function BrandingForm({
           <p className="mt-1 text-[12px] text-slate">
             Leave both empty to fall back to the workspace name.
           </p>
-        </div>
-      </section>
-
-      <section className="card space-y-4">
-        <h2 className="text-[20px]">Tier names</h2>
-        <p className="text-[13px] text-slate">
-          What you call your two service levels. These labels appear in the calculator, in reviews and on
-          agreement PDFs.
-        </p>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <label className="label" htmlFor="advantageLabel">
-              Base tier
-            </label>
-            <input
-              id="advantageLabel"
-              name="advantageLabel"
-              defaultValue={tenant.advantageLabel}
-              className="field mt-1"
-              required
-            />
-          </div>
-          <div>
-            <label className="label" htmlFor="pinnacleLabel">
-              Upper tier
-            </label>
-            <input
-              id="pinnacleLabel"
-              name="pinnacleLabel"
-              defaultValue={tenant.pinnacleLabel}
-              className="field mt-1"
-              required
-            />
-          </div>
         </div>
       </section>
 

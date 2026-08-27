@@ -14,8 +14,6 @@ export interface BrandingState {
 const HEX = /^#[0-9a-fA-F]{6}$/;
 
 const schema = z.object({
-  advantageLabel: z.string().trim().min(1, "Name the base tier.").max(40),
-  pinnacleLabel: z.string().trim().min(1, "Name the upper tier.").max(40),
   accentColor: z
     .string()
     .trim()
@@ -31,8 +29,6 @@ export async function saveBranding(_prev: BrandingState, formData: FormData): Pr
   const { user, tenant, db } = await requireRole("ADMIN");
 
   const parsed = schema.safeParse({
-    advantageLabel: formData.get("advantageLabel"),
-    pinnacleLabel: formData.get("pinnacleLabel"),
     accentColor: formData.get("accentColor") ?? "",
     pdfFooter: formData.get("pdfFooter") ?? "",
     logoUrl: formData.get("logoUrl") ?? "",
@@ -53,15 +49,11 @@ export async function saveBranding(_prev: BrandingState, formData: FormData): Pr
     logoUrl: tenant.logoUrl,
     accentColor: tenant.accentColor,
     pdfFooter: tenant.pdfFooter,
-    advantageLabel: tenant.advantageLabel,
-    pinnacleLabel: tenant.pinnacleLabel,
   };
   const after = {
     logoUrl,
     accentColor: parsed.data.accentColor || null,
     pdfFooter: parsed.data.pdfFooter || null,
-    advantageLabel: parsed.data.advantageLabel,
-    pinnacleLabel: parsed.data.pinnacleLabel,
   };
 
   await db.tenant.update({ where: { id: tenant.id }, data: after });

@@ -3,11 +3,12 @@
 import { useActionState, useMemo, useState } from "react";
 import clsx from "clsx";
 import {
+  includedLines,
   money,
   moneyRounded,
+  tierResultFor,
   type CalcInputs,
   type PricingConfig,
-  type Tier,
   type TierResult,
 } from "@/lib/pricing/engine";
 import { calculate } from "@/lib/pricing/models";
@@ -29,7 +30,7 @@ export function CalculatorClient({
   defaults: CalcInputs;
 }) {
   const [inputs, setInputs] = useState<CalcInputs>(defaults);
-  const [tier, setTier] = useState<Tier>("ADVANTAGE");
+  const [tierKey, setTierKey] = useState<string>(config.tiers[0]?.key ?? "");
   const [clientName, setClientName] = useState("");
   const [notes, setNotes] = useState("");
   const [showCosts, setShowCosts] = useState(true);
@@ -41,7 +42,8 @@ export function CalculatorClient({
   const set = <K extends keyof CalcInputs>(key: K, value: CalcInputs[K]) =>
     setInputs((prev) => ({ ...prev, [key]: value }));
 
-  const selected = tier === "PINNACLE" ? result.pinnacle : result.advantage;
+  const selected = tierResultFor(result, tierKey);
+  const baseKey = result.tiers[0]?.key;
 
   async function runExport(docType: "QUOTE" | "COGS") {
     setExportError(null);
@@ -50,7 +52,7 @@ export function CalculatorClient({
       return;
     }
     setBusy(docType);
-    const error = await downloadExport({ docType, tier, clientName, notes, inputs });
+    const error = await downloadExport({ docType, tierKey: selected.key, clientName, notes, inputs });
     setBusy(null);
     if (error) setExportError(error);
   }
@@ -283,27 +285,34 @@ export function CalculatorClient({
             </section>
           )}
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <TierCard
-              name={config.tierLabels.ADVANTAGE}
-              blurb="Core managed services"
-              tierResult={result.advantage}
-              selected={tier === "ADVANTAGE"}
-              onSelect={() => setTier("ADVANTAGE")}
-            />
-            <TierCard
-              name={config.tierLabels.PINNACLE}
-              blurb={`${config.tierLabels.ADVANTAGE} plus the security stack`}
-              tierResult={result.pinnacle}
-              selected={tier === "PINNACLE"}
-              onSelect={() => setTier("PINNACLE")}
-              footnote={`+${moneyRounded(result.delta.discountedRate)}/mo over ${config.tierLabels.ADVANTAGE}`}
-            />
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {result.tiers.map((tierResult, index) => {
+              const previous = result.tiers[index - 1];
+              const step = result.deltas[index - 1];
+              return (
+                <TierCard
+                  key={tierResult.key}
+                  name={tierResult.label}
+                  blurb={
+                    tierResult.description ??
+                    (previous ? `Everything in ${previous.label}, plus more` : "Base offering")
+                  }
+                  tierResult={tierResult}
+                  selected={tierResult.key === selected.key}
+                  onSelect={() => setTierKey(tierResult.key)}
+                  footnote={
+                    step && previous
+                      ? `+${moneyRounded(step.discountedRate)}/mo over ${previous.label}`
+                      : undefined
+                  }
+                />
+              );
+            })}
           </div>
 
           <section className="card">
             <div className="flex items-center justify-between">
-              <h2 className="text-[18px]">Cost build — {config.tierLabels[tier]}</h2>
+              <h2 className="text-[18px]">Cost build — {selected.label}</h2>
               <button type="button" className="btn-ghost btn-sm" onClick={() => setShowCosts((v) => !v)}>
                 {showCosts ? "Hide costs" : "Show costs"}
               </button>
@@ -322,14 +331,11 @@ export function CalculatorClient({
                     </tr>
                   </thead>
                   <tbody>
-                    {(tier === "PINNACLE"
-                      ? [...result.advantage.lines, ...result.pinnacle.lines]
-                      : result.advantage.lines
-                    ).map((l) => (
-                      <tr key={`${l.tier}-${l.key}`} className="border-b border-steel">
+                    {includedLines(result, selected.key).map((l) => (
+                      <tr key={`${l.tierKey}-${l.key}`} className="border-b border-steel">
                         <td className="py-2">
                           {l.label}
-                          {l.tier === "PINNACLE" ? (
+                          {l.tierKey !== baseKey ? (
                             <span className="ml-2 font-mono text-[10px] uppercase text-orange">add-on</span>
                           ) : null}
                         </td>
@@ -440,7 +446,7 @@ export function CalculatorClient({
                 <form action={submitAction} className="contents">
                   <input type="hidden" name="clientName" value={clientName} />
                   <input type="hidden" name="notes" value={notes} />
-                  <input type="hidden" name="requestedTier" value={tier} />
+                  <input type="hidden" name="requestedTierKey" value={selected.key} />
                   <input type="hidden" name="users" value={inputs.users} />
                   <input type="hidden" name="devices" value={inputs.devices} />
                   <input type="hidden" name="locations" value={inputs.locations} />
@@ -551,7 +557,9 @@ function TierCard({
         selected ? "border-orange bg-navy text-white" : "border-mist bg-white hover:border-slate",
       )}
     >
-      <p className={clsx("eyebrow", selected && "text-orange")}>{selected ? "Selected tier" : "Tier"}</p>
+      <p className={clsx("eyebrow", selected && "text-orange")}>
+        {selected ? "Selected offering" : "Offering"}
+      </p>
       <h3 className={clsx("mt-2 text-[20px]", selected && "text-white")}>{name}</h3>
       <p className={clsx("text-[13px]", selected ? "text-mist" : "text-slate")}>{blurb}</p>
       <p className={clsx("mt-4 font-display text-[34px] font-bold leading-none", selected ? "text-white" : "text-navy")}>

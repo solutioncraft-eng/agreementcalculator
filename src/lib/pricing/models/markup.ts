@@ -11,18 +11,16 @@
  * maximum.
  */
 import {
-  applyBundle,
-  applyFloor,
+  belowFloorTriggers,
   bundleFor,
-  linesFor,
   money,
+  priceTiers,
   round2,
   type CalcInputs,
   type CalcResult,
   type MarkupSettings,
   type PricingConfig,
   type PricingModelAdapter,
-  type TierResult,
   type Trigger,
 } from "@/lib/pricing/engine";
 
@@ -34,25 +32,14 @@ function calculate(
   const markup = Math.max(inputs.markupMultiple, 1);
 
   const bundle = bundleFor(config, inputs.bundleKey);
-  const bundlePct = bundle.discountPct / 100;
-
-  const advLines = linesFor(config, "ADVANTAGE", inputs);
-  const addonLines = linesFor(config, "PINNACLE", inputs);
-  const advTool = advLines.reduce((sum, l) => sum + l.monthlyCost, 0);
-  const addonTool = addonLines.reduce((sum, l) => sum + l.monthlyCost, 0);
 
   // Nothing is sold below license cost, so raw tool spend is the floor.
-  const advCostFloor = advTool;
-  const pinnCostFloor = advTool + addonTool;
-  const advStandard = advTool * markup;
-  const pinnStandard = advStandard + addonTool * s.addonMarkup;
-
-  const advBundle = applyBundle(advStandard, advCostFloor, bundlePct);
-  const pinnBundle = applyBundle(pinnStandard, pinnCostFloor, bundlePct);
-
-  const advFloor = applyFloor(advBundle.final, inputs);
-  const pinnFloor = applyFloor(pinnBundle.final, inputs);
-  const users = advFloor.users;
+  const { tiers, deltas, floorRate } = priceTiers(config, inputs, {
+    costMultiplier: 1,
+    baseMultiplier: markup,
+    addonMultiplier: s.addonMarkup,
+    bundlePct: bundle.discountPct / 100,
+  });
 
   // Cost share of the sell rate; a markup agreement carries no imputed labor,
   // so the remainder is all margin.
@@ -82,57 +69,16 @@ function calculate(
       message: `Minimum per-user floor changed from ${money(s.minPerUserFloor)} to ${money(inputs.perUserFloor)}`,
     });
   }
-  if (advFloor.belowFloor) {
-    triggers.push({
-      code: "ADVANTAGE_BELOW_FLOOR",
-      message: `${config.tierLabels.ADVANTAGE} rate ${money(advBundle.final / users)}/user is below the ${money(inputs.perUserFloor)}/user floor — floor rate applied`,
-    });
-  }
-  if (pinnFloor.belowFloor) {
-    triggers.push({
-      code: "PINNACLE_BELOW_FLOOR",
-      message: `${config.tierLabels.PINNACLE} rate ${money(pinnBundle.final / users)}/user is below the ${money(inputs.perUserFloor)}/user floor — floor rate applied`,
-    });
-  }
+  triggers.push(...belowFloorTriggers(tiers, inputs));
   if (inputs.floorOverride) {
     triggers.push({ code: "FLOOR_OVERRIDE", message: "Floor overridden — actual below-floor rate in use" });
   }
-  if (advBundle.capped || pinnBundle.capped) {
+  if (tiers.some((tier) => tier.discountCappedAtCost)) {
     triggers.push({
       code: "DISCOUNT_CAPPED_AT_COST",
       message: "Bundle discount capped at tool cost",
     });
   }
-
-  const advantage: TierResult = {
-    tier: "ADVANTAGE",
-    toolCost: advTool,
-    costFloor: advCostFloor,
-    standardRate: advStandard,
-    discount: advBundle.discount,
-    discountedRate: advBundle.final,
-    headlineRate: advFloor.headlineRate,
-    perUser: advBundle.final / users,
-    headlinePerUser: advFloor.headlineRate / users,
-    belowFloor: advFloor.belowFloor,
-    discountCappedAtCost: advBundle.capped,
-    lines: advLines,
-  };
-
-  const pinnacle: TierResult = {
-    tier: "PINNACLE",
-    toolCost: advTool + addonTool,
-    costFloor: pinnCostFloor,
-    standardRate: pinnStandard,
-    discount: pinnBundle.discount,
-    discountedRate: pinnBundle.final,
-    headlineRate: pinnFloor.headlineRate,
-    perUser: pinnBundle.final / users,
-    headlinePerUser: pinnFloor.headlineRate / users,
-    belowFloor: pinnFloor.belowFloor,
-    discountCappedAtCost: pinnBundle.capped,
-    lines: addonLines,
-  };
 
   return {
     model: "MARKUP_MULTIPLE",
@@ -140,15 +86,9 @@ function calculate(
     bundle,
     multiplier: markup,
     split: { toolPct, laborPct: 0, sgmPct: Math.max(100 - toolPct, 0) },
-    advantage,
-    pinnacle,
-    delta: {
-      toolCost: pinnacle.toolCost - advantage.toolCost,
-      standardRate: pinnStandard - advStandard,
-      discountedRate: pinnBundle.final - advBundle.final,
-      perUser: (pinnBundle.final - advBundle.final) / users,
-    },
-    floorRate: advFloor.floorRate,
+    tiers,
+    deltas,
+    floorRate,
     triggers,
     needsApproval: triggers.length > 0,
   };

@@ -3,7 +3,7 @@ import { audit } from "@/lib/audit";
 import { getTenantSession } from "@/lib/auth";
 import type { CalcInputs } from "@/lib/pricing/engine";
 import { calculate } from "@/lib/pricing/models";
-import { getActiveConfig, getConfigForVersion, tierLabels } from "@/lib/pricing/config";
+import { getActiveConfig, getConfigForVersion } from "@/lib/pricing/config";
 import {
   approvalLabel,
   buildDocument,
@@ -96,11 +96,19 @@ export async function POST(request: Request) {
   }
 
   const config = versionId
-    ? await getConfigForVersion(db, tenant, versionId)
-    : await getActiveConfig(db, tenant);
+    ? await getConfigForVersion(db, versionId)
+    : await getActiveConfig(db);
   if (!config) return NextResponse.json({ error: "No published pricing version" }, { status: 409 });
 
   const result = calculate(config, inputs);
+
+  // The requested offering has to exist in the version being priced against.
+  if (!result.tiers.some((tier) => tier.key === payload.tierKey)) {
+    return NextResponse.json(
+      { error: "That offering is not part of this pricing version." },
+      { status: 400 },
+    );
+  }
 
   // Non-standard pricing can only leave the building once leadership has signed off.
   if (!quoteId && result.needsApproval) {
@@ -131,12 +139,11 @@ export async function POST(request: Request) {
 
   const workspace: DocWorkspace = {
     name: tenant.name,
-    tierLabels: tierLabels(tenant),
     footer: tenant.pdfFooter,
     accentColor: tenant.accentColor,
   };
   const logo = await workspaceLogo(tenant.logoUrl);
-  const props = { result, tier: payload.tier, clientName, notes, stamp, workspace, logo };
+  const props = { result, tierKey: payload.tierKey, clientName, notes, stamp, workspace, logo };
 
   let bytes: Buffer;
   let checksum: string;
@@ -159,7 +166,7 @@ export async function POST(request: Request) {
       quoteId: quoteId ?? null,
       clientName,
       approvalState: approvalLabel(stamp),
-      inputs: { ...inputs, tier: payload.tier },
+      inputs: { ...inputs, tierKey: payload.tierKey },
       checksum,
     },
   });
@@ -169,7 +176,7 @@ export async function POST(request: Request) {
     entity: "ExportRecord",
     entityId: exportId,
     summary: `${payload.docType === "COGS" ? "COGS worksheet" : "Agreement summary"} exported for ${clientName} (${approvalLabel(stamp)})`,
-    after: { exportId, checksum, pricingVersion: config.versionLabel, tier: payload.tier },
+    after: { exportId, checksum, pricingVersion: config.versionLabel, tierKey: payload.tierKey },
     tenantId: tenant.id,
     actor: user,
   });

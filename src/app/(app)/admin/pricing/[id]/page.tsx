@@ -8,12 +8,13 @@ export const dynamic = "force-dynamic";
 
 export default async function PricingVersionPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { tenant, db } = await requireRole("ADMIN");
+  const { db } = await requireRole("ADMIN");
 
   const version = await db.pricingVersion.findUnique({
     where: { id },
     include: {
-      cogsItems: { orderBy: [{ tier: "asc" }, { sortOrder: "asc" }] },
+      serviceTiers: { orderBy: { sortOrder: "asc" } },
+      cogsItems: { orderBy: [{ tierKey: "asc" }, { sortOrder: "asc" }] },
       bundles: { orderBy: { sortOrder: "asc" } },
       createdBy: { select: { name: true } },
       publishedBy: { select: { name: true } },
@@ -40,13 +41,18 @@ export default async function PricingVersionPage({ params }: { params: Promise<{
           publishedBy: version.publishedBy?.name ?? null,
         }}
         fields={[...PRICING_MODELS[version.model].fields]}
-        tierLabels={{ ADVANTAGE: tenant.advantageLabel, PINNACLE: tenant.pinnacleLabel }}
+        tiers={version.serviceTiers.map((tier) => ({
+          id: tier.id,
+          key: tier.key,
+          label: tier.label,
+          description: tier.description,
+        }))}
         items={version.cogsItems.map((item) => ({
           id: item.id,
           label: item.label,
           vendor: item.vendor,
           unit: item.unit,
-          tier: item.tier,
+          tierKey: item.tierKey,
           unitCost: item.unitCost.toNumber(),
           active: item.active,
           sortOrder: item.sortOrder,

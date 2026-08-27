@@ -5,7 +5,7 @@ import { QuoteTable } from "@/components/quote-table";
 export const dynamic = "force-dynamic";
 
 export default async function MyQuotesPage() {
-  const { user, role, tenant, db } = await requireTenant();
+  const { user, role, db } = await requireTenant();
   const quotes = await db.quoteRequest.findMany({
     where: canReview(role) ? {} : { submittedById: user.id },
     orderBy: { createdAt: "desc" },
@@ -27,12 +27,7 @@ export default async function MyQuotesPage() {
       </header>
 
       {quotes.length ? (
-        <QuoteTable
-          quotes={quotes}
-          tenant={tenant}
-          hrefBase="/quotes"
-          showSubmitter={canReview(role)}
-        />
+        <QuoteTable quotes={quotes} hrefBase="/quotes" showSubmitter={canReview(role)} />
       ) : (
         <div className="card">
           <p className="text-slate">

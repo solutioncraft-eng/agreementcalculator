@@ -8,8 +8,8 @@ import { CalculatorClient } from "./calculator-client";
 export const dynamic = "force-dynamic";
 
 export default async function CalculatorPage() {
-  const { tenant, role, db } = await requireTenant();
-  const config = await getActiveConfig(db, tenant);
+  const { role, db } = await requireTenant();
+  const config = await getActiveConfig(db);
 
   if (!config) {
     return (

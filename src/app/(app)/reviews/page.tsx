@@ -5,7 +5,7 @@ import { QuoteTable } from "@/components/quote-table";
 export const dynamic = "force-dynamic";
 
 export default async function ReviewsPage() {
-  const { role, tenant, db } = await requireTenant();
+  const { role, db } = await requireTenant();
   if (!canReview(role)) forbidden();
 
   const [pending, decided] = await Promise.all([
@@ -35,12 +35,12 @@ export default async function ReviewsPage() {
         </p>
       </header>
 
-      {pending.length ? <QuoteTable quotes={pending} tenant={tenant} hrefBase="/reviews" showSubmitter /> : null}
+      {pending.length ? <QuoteTable quotes={pending} hrefBase="/reviews" showSubmitter /> : null}
 
       {decided.length ? (
         <section className="space-y-3">
           <h2 className="text-[20px]">Decided</h2>
-          <QuoteTable quotes={decided} tenant={tenant} hrefBase="/reviews" showSubmitter />
+          <QuoteTable quotes={decided} hrefBase="/reviews" showSubmitter />
         </section>
       ) : null}
     </div>

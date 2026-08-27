@@ -1,6 +1,12 @@
 import { z } from "zod";
 
-export const tierSchema = z.enum(["ADVANTAGE", "PINNACLE"]);
+/** A ServiceTier.key, unique within the pricing version that defines it. */
+export const tierKeySchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(48)
+  .regex(/^[a-z0-9][a-z0-9_-]*$/i, "Use letters, numbers, dashes or underscores");
 export const unitSchema = z.enum(["USER", "DEVICE", "LOCATION", "FLAT"]);
 
 export const calcInputsSchema = z.object({
@@ -17,7 +23,7 @@ export const calcInputsSchema = z.object({
 
 export const exportPayloadSchema = z.object({
   docType: z.enum(["QUOTE", "COGS"]),
-  tier: tierSchema,
+  tierKey: tierKeySchema,
   clientName: z.string().trim().min(1).max(120),
   notes: z.string().trim().max(2000).optional().or(z.literal("")),
   quoteId: z.string().trim().min(1).max(64).optional().or(z.literal("")),
@@ -27,7 +33,7 @@ export const exportPayloadSchema = z.object({
 export const submitQuoteSchema = z.object({
   clientName: z.string().trim().min(2, "Client name is required").max(120),
   notes: z.string().trim().max(2000).optional(),
-  requestedTier: tierSchema,
+  requestedTierKey: tierKeySchema,
   inputs: calcInputsSchema,
 });
 
@@ -41,7 +47,7 @@ export const cogsItemSchema = z.object({
   label: z.string().trim().min(2).max(80),
   vendor: z.string().trim().max(80).optional().or(z.literal("")),
   unit: unitSchema,
-  tier: tierSchema,
+  tierKey: tierKeySchema,
   unitCost: z.coerce.number().min(0).max(100_000),
   active: z.coerce.boolean().optional(),
   sortOrder: z.coerce.number().int().min(0).max(999).optional(),
@@ -66,9 +72,29 @@ export const tenantBrandingSchema = z.object({
     .optional()
     .or(z.literal("")),
   pdfFooter: z.string().trim().max(200).optional().or(z.literal("")),
-  advantageLabel: z.string().trim().min(2).max(40),
-  pinnacleLabel: z.string().trim().min(2).max(40),
 });
+
+/** One offering on a draft pricing version. */
+export const serviceTierSchema = z.object({
+  label: z.string().trim().min(2, "Name the offering.").max(40),
+  description: z.string().trim().max(120).optional().or(z.literal("")),
+  sortOrder: z.coerce.number().int().min(0).max(999).optional(),
+});
+
+/**
+ * Every offering's rate as stored on a submitted quote. Read back through this
+ * schema so the review screen never has to trust the JSON column's shape.
+ */
+export const quoteTierRatesSchema = z
+  .array(
+    z.object({
+      key: z.string().min(1),
+      label: z.string().min(1),
+      rate: z.coerce.number(),
+      perUser: z.coerce.number(),
+    }),
+  )
+  .min(1);
 
 export const createTenantSchema = z.object({
   name: z.string().trim().min(2).max(80),

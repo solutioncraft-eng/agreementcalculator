@@ -1,10 +1,19 @@
 import clsx from "clsx";
-import type { PricingVersion, QuoteRequest, QuoteReview, Tenant, User } from "@prisma/client";
+import type { PricingVersion, QuoteRequest, QuoteReview, User } from "@prisma/client";
 import { money, moneyRounded } from "@/lib/pricing/engine";
 import { calculate } from "@/lib/pricing/models";
 import { getConfigForVersion } from "@/lib/pricing/config";
 import type { TenantDb } from "@/lib/db";
-import { STATUS_CLASS, STATUS_LABEL, TRIGGER_LABEL, formatUtc, quoteInputs, tierName } from "@/lib/quotes";
+import {
+  STATUS_CLASS,
+  STATUS_LABEL,
+  TRIGGER_LABEL,
+  formatUtc,
+  quoteInputs,
+  quoteTierName,
+  storedTier,
+  storedTiers,
+} from "@/lib/quotes";
 
 const ACTION_LABEL: Record<string, string> = {
   SUBMITTED: "submitted for review",
@@ -22,25 +31,16 @@ export type QuoteWithRelations = QuoteRequest & {
   reviews: (QuoteReview & { actor: Pick<User, "name"> })[];
 };
 
-export async function QuoteDetail({
-  quote,
-  tenant,
-  db,
-}: {
-  quote: QuoteWithRelations;
-  tenant: Tenant;
-  db: TenantDb;
-}) {
-  const config = await getConfigForVersion(db, tenant, quote.pricingVersionId);
+export async function QuoteDetail({ quote, db }: { quote: QuoteWithRelations; db: TenantDb }) {
+  const config = await getConfigForVersion(db, quote.pricingVersionId);
   const inputs = quoteInputs(quote);
   const result = config ? calculate(config, inputs) : null;
-  const tier = quote.requestedTier === "PINNACLE" ? result?.pinnacle : result?.advantage;
-  const storedRate = (
-    quote.requestedTier === "PINNACLE" ? quote.pinnacleRate : quote.advantageRate
-  ).toNumber();
-  const storedPerUser = (
-    quote.requestedTier === "PINNACLE" ? quote.pinnaclePerUser : quote.advantagePerUser
-  ).toNumber();
+  const tier = result?.tiers.find((t) => t.key === quote.requestedTierKey);
+  const requested = storedTier(quote);
+  const tierLabel = quoteTierName(quote);
+  const alternatives = storedTiers(quote).filter((t) => t.key !== quote.requestedTierKey);
+  const storedRate = requested?.rate ?? 0;
+  const storedPerUser = requested?.perUser ?? 0;
 
   return (
     <div className="space-y-6">
@@ -50,7 +50,7 @@ export async function QuoteDetail({
             <p className="eyebrow">{quote.ref}</p>
             <h1 className="mt-2 text-[30px] leading-9">{quote.clientName}</h1>
             <p className="mt-1 text-[14px] text-slate">
-              {tierName(tenant, quote.requestedTier)} · submitted by {quote.submittedBy.name} ·{" "}
+              {tierLabel} · submitted by {quote.submittedBy.name} ·{" "}
               {formatUtc(quote.createdAt)}
             </p>
           </div>
@@ -114,7 +114,7 @@ export async function QuoteDetail({
 
       {result && tier ? (
         <section className="card">
-          <h2 className="text-[18px]">Cost build — {tierName(tenant, quote.requestedTier)}</h2>
+          <h2 className="text-[18px]">Cost build — {tierLabel}</h2>
           <dl className="mt-4 space-y-2 text-[14px]">
             <Row label="Monthly tool cost" value={money(tier.toolCost)} />
             {config?.model === "COST_PLUS" ? (
@@ -140,15 +140,14 @@ export async function QuoteDetail({
               />
             ) : null}
             <Row label="Agreement rate" value={money(tier.headlineRate)} strong />
-            <Row
-              label={`Alternative tier — ${tierName(tenant, quote.requestedTier === "PINNACLE" ? "ADVANTAGE" : "PINNACLE")}`}
-              value={money(
-                quote.requestedTier === "PINNACLE"
-                  ? quote.advantageRate.toNumber()
-                  : quote.pinnacleRate.toNumber(),
-              )}
-              muted
-            />
+            {alternatives.map((alternative) => (
+              <Row
+                key={alternative.key}
+                label={`Alternative offering — ${alternative.label}`}
+                value={money(alternative.rate)}
+                muted
+              />
+            ))}
           </dl>
         </section>
       ) : null}

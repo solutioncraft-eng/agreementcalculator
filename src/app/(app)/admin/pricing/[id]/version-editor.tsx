@@ -6,9 +6,12 @@ import { money } from "@/lib/pricing/engine";
 import {
   deleteBundle,
   deleteCogsItem,
+  deleteServiceTier,
+  moveServiceTier,
   publishVersion,
   saveBundle,
   saveCogsItem,
+  saveServiceTier,
   updateVersion,
   type AdminState,
 } from "../actions";
@@ -40,12 +43,19 @@ interface SettingField {
   step: string;
 }
 
+interface TierView {
+  id: string;
+  key: string;
+  label: string;
+  description: string | null;
+}
+
 interface ItemView {
   id: string;
   label: string;
   vendor: string | null;
   unit: string;
-  tier: string;
+  tierKey: string;
   unitCost: number;
   active: boolean;
   sortOrder: number;
@@ -76,13 +86,13 @@ function Feedback({ state }: { state: AdminState }) {
 export function VersionEditor({
   version,
   fields,
-  tierLabels,
+  tiers,
   items,
   bundles,
 }: {
   version: VersionView;
   fields: SettingField[];
-  tierLabels: { ADVANTAGE: string; PINNACLE: string };
+  tiers: TierView[];
   items: ItemView[];
   bundles: BundleView[];
 }) {
@@ -93,7 +103,12 @@ export function VersionEditor({
   const [bundleState, bundleAction, savingBundle] = useActionState<AdminState, FormData>(saveBundle, {});
   const [bundleDeleteState, bundleDeleteAction] = useActionState<AdminState, FormData>(deleteBundle, {});
   const [publishState, publishAction, publishing] = useActionState<AdminState, FormData>(publishVersion, {});
+  const [tierState, tierAction, savingTier] = useActionState<AdminState, FormData>(saveServiceTier, {});
+  const [tierMoveState, tierMoveAction] = useActionState<AdminState, FormData>(moveServiceTier, {});
+  const [tierDeleteState, tierDeleteAction] = useActionState<AdminState, FormData>(deleteServiceTier, {});
   const [editing, setEditing] = useState<string | null>(null);
+  const [editingTier, setEditingTier] = useState<string | null>(null);
+  const tierLabel = (key: string) => tiers.find((tier) => tier.key === key)?.label ?? key;
 
   return (
     <div className="space-y-6">
@@ -166,6 +181,96 @@ export function VersionEditor({
       </section>
 
       <section className="card">
+        <h2 className="text-[18px]">Offerings</h2>
+        <p className="mt-1 text-[14px] text-slate">
+          What this workspace sells, cheapest first. Offerings are cumulative: each one includes the COGS
+          items of every offering below it, and each step up is priced with the add-on multiplier. Publishing
+          freezes this list, so quotes and PDFs keep reproducing the offerings they were priced against.
+        </p>
+
+        <ol className="mt-4 space-y-2">
+          {tiers.map((tier, index) => (
+            <li
+              key={tier.id}
+              className="rounded-brand border border-mist px-4 py-3"
+            >
+              {editingTier === tier.id ? (
+                <TierForm
+                  action={tierAction}
+                  versionId={version.id}
+                  tier={tier}
+                  pending={savingTier}
+                  onDone={() => setEditingTier(null)}
+                />
+              ) : (
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-navy">
+                      <span className="mr-2 font-display text-[11px] uppercase tracking-eyebrow text-slate">
+                        {index === 0 ? "Base" : `Step ${index}`}
+                      </span>
+                      {tier.label}
+                    </p>
+                    <p className="text-[13px] text-slate">{tier.description ?? "—"}</p>
+                    <p className="font-mono text-[11px] text-slate">{tier.key}</p>
+                  </div>
+                  {editable ? (
+                    <div className="flex flex-wrap items-center gap-1">
+                      {[
+                        { direction: "up", symbol: "↑", disabled: index === 0 },
+                        { direction: "down", symbol: "↓", disabled: index === tiers.length - 1 },
+                      ].map((move) => (
+                        <form key={move.direction} action={tierMoveAction}>
+                          <input type="hidden" name="versionId" value={version.id} />
+                          <input type="hidden" name="tierId" value={tier.id} />
+                          <input type="hidden" name="direction" value={move.direction} />
+                          <button
+                            type="submit"
+                            className="btn-ghost btn-sm"
+                            disabled={move.disabled}
+                            aria-label={`Move ${tier.label} ${move.direction}`}
+                          >
+                            {move.symbol}
+                          </button>
+                        </form>
+                      ))}
+                      <button
+                        type="button"
+                        className="btn-ghost btn-sm"
+                        onClick={() => setEditingTier(tier.id)}
+                      >
+                        Rename
+                      </button>
+                      <form action={tierDeleteAction}>
+                        <input type="hidden" name="versionId" value={version.id} />
+                        <input type="hidden" name="tierId" value={tier.id} />
+                        <button type="submit" className="btn-ghost btn-sm text-orange-dark">
+                          Remove
+                        </button>
+                      </form>
+                    </div>
+                  ) : null}
+                </div>
+              )}
+            </li>
+          ))}
+          {tiers.length === 0 ? (
+            <li className="text-slate">No offerings yet — add at least one before publishing.</li>
+          ) : null}
+        </ol>
+        <Feedback state={tierState} />
+        <Feedback state={tierMoveState} />
+        <Feedback state={tierDeleteState} />
+
+        {editable ? (
+          <div className="mt-6 border-t border-mist pt-5">
+            <h3 className="label">Add an offering</h3>
+            <TierForm action={tierAction} versionId={version.id} pending={savingTier} />
+          </div>
+        ) : null}
+      </section>
+
+      <section className="card">
         <h2 className="text-[18px]">COGS items</h2>
         <p className="mt-1 text-[14px] text-slate">
           Each item is billed to you on a unit basis. The basis decides what it multiplies by: user count,
@@ -179,7 +284,7 @@ export function VersionEditor({
                 <th className="py-3">Item</th>
                 <th className="py-3">Vendor</th>
                 <th className="py-3">Basis</th>
-                <th className="py-3">Tier</th>
+                <th className="py-3">Offering</th>
                 <th className="py-3 text-right">Unit cost</th>
                 <th className="py-3">Active</th>
                 {editable ? <th className="py-3" /> : null}
@@ -193,7 +298,7 @@ export function VersionEditor({
                       <ItemForm
                         action={itemAction}
                         versionId={version.id}
-                        tierLabels={tierLabels}
+                        tiers={tiers}
                         item={item}
                         pending={savingItem}
                         onDone={() => setEditing(null)}
@@ -209,10 +314,10 @@ export function VersionEditor({
                       <span
                         className={clsx(
                           "rounded-brand px-2 py-1 font-display text-[10px] font-bold uppercase tracking-eyebrow",
-                          item.tier === "PINNACLE" ? "bg-orange text-orange-contrast" : "bg-navy text-white",
+                          item.tierKey === tiers[0]?.key ? "bg-navy text-white" : "bg-orange text-orange-contrast",
                         )}
                       >
-                        {item.tier}
+                        {tierLabel(item.tierKey)}
                       </span>
                     </td>
                     <td className="py-3 text-right">{money(item.unitCost)}</td>
@@ -243,12 +348,7 @@ export function VersionEditor({
         {editable ? (
           <div className="mt-6 border-t border-mist pt-5">
             <h3 className="label">Add an item</h3>
-            <ItemForm
-              action={itemAction}
-              versionId={version.id}
-              tierLabels={tierLabels}
-              pending={savingItem}
-            />
+            <ItemForm action={itemAction} versionId={version.id} tiers={tiers} pending={savingItem} />
           </div>
         ) : null}
       </section>
@@ -307,17 +407,55 @@ export function VersionEditor({
   );
 }
 
+function TierForm({
+  action,
+  versionId,
+  tier,
+  pending,
+  onDone,
+}: {
+  action: (formData: FormData) => void;
+  versionId: string;
+  tier?: TierView;
+  pending: boolean;
+  onDone?: () => void;
+}) {
+  return (
+    <form action={action} className="grid gap-3 md:grid-cols-3 md:items-end">
+      <input type="hidden" name="versionId" value={versionId} />
+      {tier ? <input type="hidden" name="tierId" value={tier.id} /> : null}
+      <Field name="label" label="Offering name" defaultValue={tier?.label} placeholder="Pinnacle" />
+      <Field
+        name="description"
+        label="One-line description"
+        defaultValue={tier?.description ?? ""}
+        placeholder="Adds the security stack"
+      />
+      <div className="flex gap-2">
+        <button type="submit" className="btn-navy" disabled={pending}>
+          {pending ? "Saving…" : tier ? "Save offering" : "Add offering"}
+        </button>
+        {onDone ? (
+          <button type="button" className="btn-ghost" onClick={onDone}>
+            Cancel
+          </button>
+        ) : null}
+      </div>
+    </form>
+  );
+}
+
 function ItemForm({
   action,
   versionId,
-  tierLabels,
+  tiers,
   item,
   pending,
   onDone,
 }: {
   action: (formData: FormData) => void;
   versionId: string;
-  tierLabels: { ADVANTAGE: string; PINNACLE: string };
+  tiers: TierView[];
   item?: ItemView;
   pending: boolean;
   onDone?: () => void;
@@ -349,16 +487,19 @@ function ItemForm({
       </div>
       <div>
         <label className="label" htmlFor={`tier-${item?.id ?? "new"}`}>
-          Tier
+          Offering
         </label>
         <select
           id={`tier-${item?.id ?? "new"}`}
-          name="tier"
-          defaultValue={item?.tier ?? "ADVANTAGE"}
+          name="tierKey"
+          defaultValue={item?.tierKey ?? tiers[0]?.key ?? ""}
           className="field mt-1"
         >
-          <option value="ADVANTAGE">{tierLabels.ADVANTAGE}</option>
-          <option value="PINNACLE">{tierLabels.PINNACLE} add-on</option>
+          {tiers.map((tier, index) => (
+            <option key={tier.key} value={tier.key}>
+              {index === 0 ? tier.label : `${tier.label} add-on`}
+            </option>
+          ))}
         </select>
       </div>
       <Field

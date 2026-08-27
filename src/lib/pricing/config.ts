@@ -1,17 +1,13 @@
-import type { BundleDiscount, CogsItem, PricingVersion, Tenant } from "@prisma/client";
+import type { BundleDiscount, CogsItem, PricingVersion, ServiceTier } from "@prisma/client";
 import type { TenantDb } from "@/lib/db";
-import { NO_BUNDLE, type PricingConfig, type Tier } from "@/lib/pricing/engine";
+import { NO_BUNDLE, type PricingConfig } from "@/lib/pricing/engine";
 import { costPlusSettingsSchema, markupSettingsSchema } from "@/lib/pricing/models";
 
 export type VersionWithChildren = PricingVersion & {
+  serviceTiers: ServiceTier[];
   cogsItems: CogsItem[];
   bundles: BundleDiscount[];
 };
-
-/** Tenant-facing names for the two service tiers. */
-export function tierLabels(tenant: Tenant): Record<Tier, string> {
-  return { ADVANTAGE: tenant.advantageLabel, PINNACLE: tenant.pinnacleLabel };
-}
 
 /**
  * Turns a stored version into the shape the engine takes. The model and its
@@ -19,7 +15,7 @@ export function tierLabels(tenant: Tenant): Record<Tier, string> {
  * choice, so a quote calculated under an older version keeps reproducing the
  * same numbers after the tenant tunes its pricing.
  */
-export function toConfig(version: VersionWithChildren, tenant: Tenant): PricingConfig {
+export function toConfig(version: VersionWithChildren): PricingConfig {
   const items = version.cogsItems
     .filter((item) => item.active)
     .sort((a, b) => a.sortOrder - b.sortOrder)
@@ -28,7 +24,7 @@ export function toConfig(version: VersionWithChildren, tenant: Tenant): PricingC
       label: item.label,
       vendor: item.vendor,
       unit: item.unit,
-      tier: item.tier,
+      tierKey: item.tierKey,
       unitCost: item.unitCost.toNumber(),
       sortOrder: item.sortOrder,
     }));
@@ -47,13 +43,22 @@ export function toConfig(version: VersionWithChildren, tenant: Tenant): PricingC
       })),
   ];
 
+  const tiers = [...version.serviceTiers]
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((tier) => ({
+      key: tier.key,
+      label: tier.label,
+      description: tier.description,
+      sortOrder: tier.sortOrder,
+    }));
+
   const base = {
     versionId: version.id,
     versionLabel: version.label,
     costBasis: version.costBasis,
     items,
     bundles,
-    tierLabels: tierLabels(tenant),
+    tiers,
   };
 
   return version.model === "COST_PLUS"
@@ -61,7 +66,7 @@ export function toConfig(version: VersionWithChildren, tenant: Tenant): PricingC
     : { ...base, model: "MARKUP_MULTIPLE", settings: markupSettingsSchema.parse(version.settings) };
 }
 
-const include = { cogsItems: true, bundles: true } as const;
+const include = { serviceTiers: true, cogsItems: true, bundles: true } as const;
 
 /** The pricing version every new quote in this workspace is calculated against. */
 export async function getActivePricingVersion(db: TenantDb): Promise<VersionWithChildren | null> {
@@ -72,18 +77,17 @@ export async function getActivePricingVersion(db: TenantDb): Promise<VersionWith
   });
 }
 
-export async function getActiveConfig(db: TenantDb, tenant: Tenant): Promise<PricingConfig | null> {
+export async function getActiveConfig(db: TenantDb): Promise<PricingConfig | null> {
   const version = await getActivePricingVersion(db);
-  return version ? toConfig(version, tenant) : null;
+  return version ? toConfig(version) : null;
 }
 
 export async function getConfigForVersion(
   db: TenantDb,
-  tenant: Tenant,
   versionId: string,
 ): Promise<PricingConfig | null> {
   const version = await db.pricingVersion.findUnique({ where: { id: versionId }, include });
-  return version ? toConfig(version, tenant) : null;
+  return version ? toConfig(version) : null;
 }
 
 export async function getVersionWithChildren(

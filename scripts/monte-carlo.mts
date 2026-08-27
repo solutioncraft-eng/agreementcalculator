@@ -11,8 +11,9 @@ import { renderMonteCarloReport, type Simulation } from "../src/lib/pdf/monte-ca
  *
  * The engine is pure, so every run is a property test: sample an environment
  * and a set of pricing levers, then assert the invariants the agreement model
- * depends on (never priced below cost, floor always honoured, Pinnacle never
- * cheaper than Advantage, every off-policy lever raises a review trigger).
+ * depends on (never priced below cost, floor always honoured, each offering
+ * never cheaper than the one below it, every off-policy lever raises a review
+ * trigger).
  * Distribution stats come out of the same pass so leadership can see how often
  * a quote lands outside policy and where the rates cluster.
  */
@@ -52,18 +53,14 @@ export const INVARIANTS: InvariantSpec[] = [
     check: (r) =>
       finite(
         r.multiplier,
-        r.advantage.toolCost,
-        r.advantage.costFloor,
-        r.advantage.standardRate,
-        r.advantage.discountedRate,
-        r.advantage.headlineRate,
-        r.advantage.perUser,
-        r.pinnacle.toolCost,
-        r.pinnacle.costFloor,
-        r.pinnacle.standardRate,
-        r.pinnacle.discountedRate,
-        r.pinnacle.headlineRate,
-        r.pinnacle.perUser,
+        ...r.tiers.flatMap((t) => [
+          t.toolCost,
+          t.costFloor,
+          t.standardRate,
+          t.discountedRate,
+          t.headlineRate,
+          t.perUser,
+        ]),
       )
         ? null
         : "non-finite rate produced",
@@ -71,13 +68,13 @@ export const INVARIANTS: InvariantSpec[] = [
   {
     id: "NEVER_BELOW_COST",
     title: "No quote is ever priced below cost",
-    detail: "Both tiers stay at or above tool + imputed labor, even with the largest bundle discount applied.",
+    detail:
+      "Every offering stays at or above tool + imputed labor, even with the largest bundle discount applied.",
     check: (r) => {
-      if (r.advantage.discountedRate < r.advantage.costFloor - EPS) {
-        return `Advantage ${r.advantage.discountedRate.toFixed(2)} < cost floor ${r.advantage.costFloor.toFixed(2)}`;
-      }
-      if (r.pinnacle.discountedRate < r.pinnacle.costFloor - EPS) {
-        return `Pinnacle ${r.pinnacle.discountedRate.toFixed(2)} < cost floor ${r.pinnacle.costFloor.toFixed(2)}`;
+      for (const tier of r.tiers) {
+        if (tier.discountedRate < tier.costFloor - EPS) {
+          return `${tier.label} ${tier.discountedRate.toFixed(2)} < cost floor ${tier.costFloor.toFixed(2)}`;
+        }
       }
       return null;
     },
@@ -89,26 +86,30 @@ export const INVARIANTS: InvariantSpec[] = [
     check: (r) => {
       if (r.inputs.floorOverride) return null;
       const users = Math.max(r.inputs.users, 1);
-      const advPerUser = r.advantage.headlineRate / users;
-      const pinnPerUser = r.pinnacle.headlineRate / users;
-      if (advPerUser < r.inputs.perUserFloor - EPS) {
-        return `Advantage ${advPerUser.toFixed(2)}/user < floor ${r.inputs.perUserFloor.toFixed(2)}`;
-      }
-      if (pinnPerUser < r.inputs.perUserFloor - EPS) {
-        return `Pinnacle ${pinnPerUser.toFixed(2)}/user < floor ${r.inputs.perUserFloor.toFixed(2)}`;
+      for (const tier of r.tiers) {
+        const perUser = tier.headlineRate / users;
+        if (perUser < r.inputs.perUserFloor - EPS) {
+          return `${tier.label} ${perUser.toFixed(2)}/user < floor ${r.inputs.perUserFloor.toFixed(2)}`;
+        }
       }
       return null;
     },
   },
   {
-    id: "PINNACLE_PREMIUM",
-    title: "Pinnacle is never cheaper than Advantage",
-    detail: "Cost, standard rate and discounted rate all move in the right direction for the upgrade tier.",
+    id: "LADDER_PREMIUM",
+    title: "Each offering is never cheaper than the one below it",
+    detail: "Cost, standard rate and discounted rate all move in the right direction up the ladder.",
     check: (r) => {
-      if (r.pinnacle.toolCost < r.advantage.toolCost - EPS) return "Pinnacle tool cost below Advantage";
-      if (r.pinnacle.standardRate < r.advantage.standardRate - EPS) return "Pinnacle standard rate below Advantage";
-      if (r.pinnacle.discountedRate < r.advantage.discountedRate - EPS) {
-        return "Pinnacle discounted rate below Advantage";
+      for (let i = 1; i < r.tiers.length; i += 1) {
+        const lower = r.tiers[i - 1];
+        const upper = r.tiers[i];
+        if (upper.toolCost < lower.toolCost - EPS) return `${upper.label} tool cost below ${lower.label}`;
+        if (upper.standardRate < lower.standardRate - EPS) {
+          return `${upper.label} standard rate below ${lower.label}`;
+        }
+        if (upper.discountedRate < lower.discountedRate - EPS) {
+          return `${upper.label} discounted rate below ${lower.label}`;
+        }
       }
       return null;
     },
@@ -119,10 +120,11 @@ export const INVARIANTS: InvariantSpec[] = [
     detail: "standardRate x (1 - SGM) equals the cost floor, so the slider means what it says.",
     check: (r, config) => {
       const sgm = Math.min(Math.max(r.inputs.sgmPct, 0), config.settings.maxSgmPct) / 100;
-      const implied = r.advantage.standardRate * (1 - sgm);
-      return near(implied, r.advantage.costFloor, 1e-9)
+      const base = r.tiers[0];
+      const implied = base.standardRate * (1 - sgm);
+      return near(implied, base.costFloor, 1e-9)
         ? null
-        : `implied cost ${implied.toFixed(4)} ≠ cost floor ${r.advantage.costFloor.toFixed(4)}`;
+        : `implied cost ${implied.toFixed(4)} ≠ cost floor ${base.costFloor.toFixed(4)}`;
     },
   },
   {
@@ -141,11 +143,11 @@ export const INVARIANTS: InvariantSpec[] = [
     detail: "The applied discount sits between zero and the bundle's percentage of the standard rate.",
     check: (r) => {
       const pct = r.bundle.discountPct / 100;
-      const maxDiscount = r.advantage.standardRate * pct + EPS;
-      if (r.advantage.discount < -EPS) return "negative Advantage discount";
-      if (r.advantage.discount > maxDiscount) return "Advantage discount exceeds the bundle percentage";
-      if (r.pinnacle.discount > r.pinnacle.standardRate * pct + EPS) {
-        return "Pinnacle discount exceeds the bundle percentage";
+      for (const tier of r.tiers) {
+        if (tier.discount < -EPS) return `negative ${tier.label} discount`;
+        if (tier.discount > tier.standardRate * pct + EPS) {
+          return `${tier.label} discount exceeds the bundle percentage`;
+        }
       }
       return null;
     },
@@ -161,11 +163,8 @@ export const INVARIANTS: InvariantSpec[] = [
       if (r.inputs.perUserFloor !== config.settings.minPerUserFloor) expected.push("FLOOR_CHANGED");
       if (r.inputs.floorOverride) expected.push("FLOOR_OVERRIDE");
       if (r.inputs.addonMultiplier !== config.settings.addonMultiplier) expected.push("ADDON_MULTIPLIER_NON_DEFAULT");
-      if (r.advantage.belowFloor) expected.push("ADVANTAGE_BELOW_FLOOR");
-      if (r.pinnacle.belowFloor) expected.push("PINNACLE_BELOW_FLOOR");
-      if (r.advantage.discountCappedAtCost || r.pinnacle.discountCappedAtCost) {
-        expected.push("DISCOUNT_CAPPED_AT_COST");
-      }
+      if (r.tiers.some((t) => t.belowFloor)) expected.push("TIER_BELOW_FLOOR");
+      if (r.tiers.some((t) => t.discountCappedAtCost)) expected.push("DISCOUNT_CAPPED_AT_COST");
       const raised = new Set(r.triggers.map((t) => t.code));
       const missing = expected.filter((code) => !raised.has(code));
       if (missing.length > 0) return `missing trigger(s) ${missing.join(", ")}`;
@@ -184,10 +183,8 @@ export const INVARIANTS: InvariantSpec[] = [
         r.inputs.perUserFloor === config.settings.minPerUserFloor &&
         r.inputs.addonMultiplier === config.settings.addonMultiplier &&
         !r.inputs.floorOverride &&
-        !r.advantage.belowFloor &&
-        !r.pinnacle.belowFloor &&
-        !r.advantage.discountCappedAtCost &&
-        !r.pinnacle.discountCappedAtCost;
+        !r.tiers.some((t) => t.belowFloor) &&
+        !r.tiers.some((t) => t.discountCappedAtCost);
       if (!onPolicy) return null;
       return r.needsApproval ? `flagged on-policy quote: ${r.triggers.map((t) => t.code).join(", ")}` : null;
     },
@@ -203,8 +200,10 @@ export const INVARIANTS: InvariantSpec[] = [
         devices: r.inputs.devices + 1,
         locations: r.inputs.locations + 1,
       });
-      if (bigger.advantage.toolCost < r.advantage.toolCost - EPS) return "tool cost fell as the environment grew";
-      if (bigger.advantage.standardRate < r.advantage.standardRate - EPS) return "standard rate fell as the environment grew";
+      if (bigger.tiers[0].toolCost < r.tiers[0].toolCost - EPS) return "tool cost fell as the environment grew";
+      if (bigger.tiers[0].standardRate < r.tiers[0].standardRate - EPS) {
+        return "standard rate fell as the environment grew";
+      }
       return null;
     },
   },
@@ -215,7 +214,9 @@ export const INVARIANTS: InvariantSpec[] = [
     check: (r, config) => {
       if (r.inputs.sgmPct >= config.settings.maxSgmPct) return null;
       const richer = calculate(config, { ...r.inputs, sgmPct: r.inputs.sgmPct + 1 });
-      return richer.advantage.standardRate < r.advantage.standardRate - EPS ? "standard rate fell as SGM rose" : null;
+      return richer.tiers[0].standardRate < r.tiers[0].standardRate - EPS
+        ? "standard rate fell as SGM rose"
+        : null;
     },
   },
   {
@@ -279,8 +280,7 @@ async function main() {
   const invariantFailures = new Map<string, number>();
   const triggerCounts = new Map<string, number>();
   const failures: Failure[] = [];
-  const advPerUser: number[] = [];
-  const pinnPerUser: number[] = [];
+  const perUserByTier = new Map<string, number[]>();
   const realisedMargin: number[] = [];
 
   let flagged = 0;
@@ -300,23 +300,25 @@ async function main() {
     }
 
     if (result.needsApproval) flagged += 1;
-    if (result.advantage.belowFloor || result.pinnacle.belowFloor) belowFloor += 1;
-    if (result.advantage.discountCappedAtCost || result.pinnacle.discountCappedAtCost) discountCapped += 1;
+    if (result.tiers.some((t) => t.belowFloor)) belowFloor += 1;
+    if (result.tiers.some((t) => t.discountCappedAtCost)) discountCapped += 1;
     for (const trigger of result.triggers) {
       triggerCounts.set(trigger.code, (triggerCounts.get(trigger.code) ?? 0) + 1);
     }
 
-    advPerUser.push(result.advantage.headlinePerUser);
-    pinnPerUser.push(result.pinnacle.headlinePerUser);
-    if (result.advantage.headlineRate > 0) {
-      realisedMargin.push(
-        ((result.advantage.headlineRate - result.advantage.toolCost) / result.advantage.headlineRate) * 100,
-      );
+    for (const tier of result.tiers) {
+      const bucket = perUserByTier.get(tier.label);
+      if (bucket) bucket.push(tier.headlinePerUser);
+      else perUserByTier.set(tier.label, [tier.headlinePerUser]);
+    }
+
+    const base = result.tiers[0];
+    if (base.headlineRate > 0) {
+      realisedMargin.push(((base.headlineRate - base.toolCost) / base.headlineRate) * 100);
     }
   }
 
-  advPerUser.sort((a, b) => a - b);
-  pinnPerUser.sort((a, b) => a - b);
+  for (const values of perUserByTier.values()) values.sort((a, b) => a - b);
   realisedMargin.sort((a, b) => a - b);
 
   const simulation: Simulation = {
@@ -338,8 +340,10 @@ async function main() {
       .map(([code, count]) => ({ code, count, pct: (count / TRIALS) * 100 }))
       .sort((a, b) => b.count - a.count),
     distributions: [
-      { label: "Advantage $/user/month", values: advPerUser },
-      { label: "Pinnacle $/user/month", values: pinnPerUser },
+      ...[...perUserByTier.entries()].map(([label, values]) => ({
+        label: `${label} $/user/month`,
+        values,
+      })),
       { label: "Realised margin over tool cost (%)", values: realisedMargin },
     ].map(({ label, values }) => ({
       label,

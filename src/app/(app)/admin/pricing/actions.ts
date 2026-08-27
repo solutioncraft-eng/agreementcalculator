@@ -4,14 +4,20 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth";
-import { bundleSchema, cogsItemSchema, slugify, versionMetaSchema } from "@/lib/schemas";
+import {
+  bundleSchema,
+  cogsItemSchema,
+  serviceTierSchema,
+  slugify,
+  versionMetaSchema,
+} from "@/lib/schemas";
 import {
   PRICING_MODELS,
   costPlusSettingsSchema,
   markupSettingsSchema,
   parseSettings,
 } from "@/lib/pricing/models";
-import { SEED_COST_BASIS, SEED_VERSION_LABEL } from "@/lib/pricing/defaults";
+import { SEED_COST_BASIS, SEED_SERVICE_TIERS, SEED_VERSION_LABEL } from "@/lib/pricing/defaults";
 
 export interface AdminState {
   error?: string;
@@ -36,7 +42,7 @@ export async function createDraft(): Promise<void> {
   const source = await db.pricingVersion.findFirst({
     where: { status: "PUBLISHED" },
     orderBy: { publishedAt: "desc" },
-    include: { cogsItems: true, bundles: true },
+    include: { serviceTiers: true, cogsItems: true, bundles: true },
   });
 
   const draft = await db.pricingVersion.create({
@@ -52,6 +58,19 @@ export async function createDraft(): Promise<void> {
           ? parseSettings(source.model, source.settings)
           : PRICING_MODELS[tenant.pricingModel].defaults,
       createdById: user.id,
+      // The offerings are cloned with the items, so a draft opens with the
+      // ladder the published version sells and the admin edits from there.
+      serviceTiers: {
+        create: (source?.serviceTiers.length
+          ? source.serviceTiers.map((tier) => ({
+              key: tier.key,
+              label: tier.label,
+              description: tier.description,
+              sortOrder: tier.sortOrder,
+            }))
+          : SEED_SERVICE_TIERS.map((tier, index) => ({ ...tier, sortOrder: index }))
+        ).map((tier) => ({ ...tier, tenantId: tenant.id })),
+      },
       cogsItems: source
         ? {
             create: source.cogsItems.map((item) => ({
@@ -60,7 +79,7 @@ export async function createDraft(): Promise<void> {
               label: item.label,
               vendor: item.vendor,
               unit: item.unit,
-              tier: item.tier,
+              tierKey: item.tierKey,
               unitCost: item.unitCost,
               active: item.active,
               sortOrder: item.sortOrder,
@@ -176,13 +195,17 @@ export async function saveCogsItem(_prev: AdminState, formData: FormData): Promi
     label: formData.get("label"),
     vendor: formData.get("vendor") ?? undefined,
     unit: formData.get("unit"),
-    tier: formData.get("tier"),
+    tierKey: formData.get("tierKey"),
     unitCost: formData.get("unitCost"),
     active: formData.get("active") === "on" || formData.get("active") === "true",
     sortOrder: formData.get("sortOrder") ?? 0,
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the COGS item values." };
   const data = parsed.data;
+
+  // An item may only be allocated to an offering this same draft defines.
+  const tier = await db.serviceTier.findFirst({ where: { versionId, key: data.tierKey } });
+  if (!tier) return { error: "Choose an offering that is part of this draft." };
 
   if (itemId) {
     const before = await db.cogsItem.findUnique({ where: { id: itemId } });
@@ -193,7 +216,7 @@ export async function saveCogsItem(_prev: AdminState, formData: FormData): Promi
         label: data.label,
         vendor: data.vendor || null,
         unit: data.unit,
-        tier: data.tier,
+        tierKey: data.tierKey,
         unitCost: data.unitCost,
         active: data.active ?? true,
         sortOrder: data.sortOrder ?? before.sortOrder,
@@ -207,7 +230,7 @@ export async function saveCogsItem(_prev: AdminState, formData: FormData): Promi
       before: {
         label: before.label,
         unit: before.unit,
-        tier: before.tier,
+        tierKey: before.tierKey,
         unitCost: before.unitCost.toString(),
         active: before.active,
       },
@@ -231,7 +254,7 @@ export async function saveCogsItem(_prev: AdminState, formData: FormData): Promi
         label: data.label,
         vendor: data.vendor || null,
         unit: data.unit,
-        tier: data.tier,
+        tierKey: data.tierKey,
         unitCost: data.unitCost,
         active: data.active ?? true,
         sortOrder: data.sortOrder ?? 100,
@@ -272,13 +295,178 @@ export async function deleteCogsItem(_prev: AdminState, formData: FormData): Pro
     entity: "CogsItem",
     entityId: item.key,
     summary: `COGS item "${item.label}" removed from draft ${version.label}`,
-    before: { label: item.label, unit: item.unit, tier: item.tier, unitCost: item.unitCost.toString() },
+    before: {
+      label: item.label,
+      unit: item.unit,
+      tierKey: item.tierKey,
+      unitCost: item.unitCost.toString(),
+    },
     tenantId: tenant.id,
     actor: user,
   });
 
   revalidatePath(`/admin/pricing/${versionId}`);
   return { ok: `Removed ${item.label}.` };
+}
+
+/**
+ * Adds or renames one of the draft's offerings. Keys are generated once and
+ * never rewritten, because COGS items and submitted quotes point at them.
+ */
+export async function saveServiceTier(_prev: AdminState, formData: FormData): Promise<AdminState> {
+  const { user, tenant, db } = await requireRole("ADMIN");
+  const versionId = String(formData.get("versionId") ?? "");
+  const tierId = String(formData.get("tierId") ?? "");
+
+  const version = await db.pricingVersion.findUnique({ where: { id: versionId } });
+  if (!version) return { error: "That pricing version no longer exists." };
+  if (version.status !== "DRAFT") {
+    return { error: "Published versions are immutable — create a new draft to change offerings." };
+  }
+
+  const parsed = serviceTierSchema.safeParse({
+    label: formData.get("label"),
+    description: formData.get("description") ?? undefined,
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the offering." };
+  const data = parsed.data;
+
+  const tiers = await db.serviceTier.findMany({ where: { versionId }, orderBy: { sortOrder: "asc" } });
+
+  if (tierId) {
+    const before = tiers.find((tier) => tier.id === tierId);
+    if (!before) return { error: "That offering is not part of this draft." };
+    await db.serviceTier.update({
+      where: { id: tierId },
+      data: { label: data.label, description: data.description || null },
+    });
+    await audit({
+      action: "SERVICE_TIER_UPDATED",
+      entity: "ServiceTier",
+      entityId: before.key,
+      summary: `Offering "${before.label}" renamed to "${data.label}" on draft ${version.label}`,
+      before: { label: before.label, description: before.description },
+      after: { ...data },
+      tenantId: tenant.id,
+      actor: user,
+    });
+    revalidatePath(`/admin/pricing/${versionId}`);
+    return { ok: "Offering updated." };
+  }
+
+  if (tiers.length >= 8) return { error: "Eight offerings is the most a version can hold." };
+
+  const base = slugify(data.label) || "offering";
+  const key = tiers.some((tier) => tier.key === base) ? `${base}-${tiers.length + 1}` : base;
+
+  await db.serviceTier.create({
+    data: {
+      tenantId: tenant.id,
+      versionId,
+      key,
+      label: data.label,
+      description: data.description || null,
+      sortOrder: (tiers.at(-1)?.sortOrder ?? -1) + 1,
+    },
+  });
+  await audit({
+    action: "SERVICE_TIER_CREATED",
+    entity: "ServiceTier",
+    entityId: key,
+    summary: `Offering "${data.label}" added to draft ${version.label}`,
+    after: { ...data, key },
+    tenantId: tenant.id,
+    actor: user,
+  });
+
+  revalidatePath(`/admin/pricing/${versionId}`);
+  return { ok: `Added ${data.label}.` };
+}
+
+/** Moves an offering one step up or down the ladder. */
+export async function moveServiceTier(_prev: AdminState, formData: FormData): Promise<AdminState> {
+  const { user, tenant, db } = await requireRole("ADMIN");
+  const versionId = String(formData.get("versionId") ?? "");
+  const tierId = String(formData.get("tierId") ?? "");
+  const direction = formData.get("direction") === "up" ? -1 : 1;
+
+  const version = await db.pricingVersion.findUnique({ where: { id: versionId } });
+  if (!version) return { error: "That pricing version no longer exists." };
+  if (version.status !== "DRAFT") {
+    return { error: "Published versions are immutable — create a new draft to change offerings." };
+  }
+
+  const tiers = await db.serviceTier.findMany({ where: { versionId }, orderBy: { sortOrder: "asc" } });
+  const index = tiers.findIndex((tier) => tier.id === tierId);
+  const target = index + direction;
+  if (index < 0) return { error: "That offering is not part of this draft." };
+  if (target < 0 || target >= tiers.length) return { ok: "Already at the end of the ladder." };
+
+  const reordered = [...tiers];
+  [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
+
+  await db.$transaction(
+    reordered.map((tier, position) =>
+      db.serviceTier.update({ where: { id: tier.id }, data: { sortOrder: position } }),
+    ),
+  );
+
+  await audit({
+    action: "SERVICE_TIER_UPDATED",
+    entity: "ServiceTier",
+    entityId: tiers[index].key,
+    summary: `Offering "${tiers[index].label}" moved ${direction < 0 ? "up" : "down"} on draft ${version.label}`,
+    after: { order: reordered.map((tier) => tier.key) },
+    tenantId: tenant.id,
+    actor: user,
+  });
+
+  revalidatePath(`/admin/pricing/${versionId}`);
+  return { ok: "Order updated." };
+}
+
+export async function deleteServiceTier(_prev: AdminState, formData: FormData): Promise<AdminState> {
+  const { user, tenant, db } = await requireRole("ADMIN");
+  const versionId = String(formData.get("versionId") ?? "");
+  const tierId = String(formData.get("tierId") ?? "");
+
+  const version = await db.pricingVersion.findUnique({ where: { id: versionId } });
+  if (!version) return { error: "That pricing version no longer exists." };
+  if (version.status !== "DRAFT") {
+    return { error: "Published versions are immutable — create a new draft to change offerings." };
+  }
+
+  const tiers = await db.serviceTier.findMany({ where: { versionId }, orderBy: { sortOrder: "asc" } });
+  const tier = tiers.find((row) => row.id === tierId);
+  if (!tier) return { error: "That offering is not part of this draft." };
+  if (tiers.length === 1) return { error: "A version needs at least one offering." };
+
+  const items = await db.cogsItem.count({ where: { versionId, tierKey: tier.key } });
+  if (items > 0) {
+    return {
+      error: `Move the ${items} COGS item${items === 1 ? "" : "s"} in ${tier.label} to another offering first.`,
+    };
+  }
+
+  await db.serviceTier.delete({ where: { id: tierId } });
+  await db.$transaction(
+    tiers
+      .filter((row) => row.id !== tierId)
+      .map((row, position) => db.serviceTier.update({ where: { id: row.id }, data: { sortOrder: position } })),
+  );
+
+  await audit({
+    action: "SERVICE_TIER_DELETED",
+    entity: "ServiceTier",
+    entityId: tier.key,
+    summary: `Offering "${tier.label}" removed from draft ${version.label}`,
+    before: { label: tier.label, description: tier.description },
+    tenantId: tenant.id,
+    actor: user,
+  });
+
+  revalidatePath(`/admin/pricing/${versionId}`);
+  return { ok: `Removed ${tier.label}.` };
 }
 
 export async function saveBundle(_prev: AdminState, formData: FormData): Promise<AdminState> {
@@ -370,8 +558,18 @@ export async function publishVersion(_prev: AdminState, formData: FormData): Pro
     return { error: "Published versions are immutable — create a new draft to change pricing." };
   }
 
-  const items = await db.cogsItem.count({ where: { versionId, active: true } });
-  if (items === 0) return { error: "Add at least one active COGS item before publishing." };
+  const tiers = await db.serviceTier.findMany({ where: { versionId } });
+  if (tiers.length === 0) return { error: "Add at least one offering before publishing." };
+
+  const activeItems = await db.cogsItem.findMany({ where: { versionId, active: true } });
+  if (activeItems.length === 0) return { error: "Add at least one active COGS item before publishing." };
+
+  const keys = new Set(tiers.map((tier) => tier.key));
+  const orphan = activeItems.find((item) => !keys.has(item.tierKey));
+  if (orphan) {
+    return { error: `"${orphan.label}" is not allocated to one of this version's offerings.` };
+  }
+  const items = activeItems.length;
 
   const previous = await db.pricingVersion.findFirst({
     where: { status: "PUBLISHED" },
