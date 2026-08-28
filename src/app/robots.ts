@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { absoluteUrl } from "@/lib/seo";
 import { rootDomain, slugFromHost } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
@@ -35,6 +36,7 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
         ],
       },
     ],
-    host: process.env.APP_BASE_URL ?? `https://${rootDomain()}`,
+    sitemap: absoluteUrl("/sitemap.xml"),
+    host: rootDomain(),
   };
 }

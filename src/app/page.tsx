@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
+import { FAQ, PRODUCT_NAME, landingJsonLd } from "@/lib/seo";
 import { slugFromHost } from "@/lib/tenant";
 import { PRICE_PER_MONTH, TRIAL_DAYS } from "@/lib/trial";
 import { LogoMark } from "@/components/logo";
@@ -9,11 +10,33 @@ import { MarketingFooter, MarketingHeader } from "@/components/marketing-chrome"
 
 export const dynamic = "force-dynamic";
 
+const TITLE = "MSP agreement pricing software · Agreement Calculator";
+const DESCRIPTION = `Price managed services agreements from your own COGS and margin policy: published pricing versions, per-user floors, leadership approval on off-policy pricing, and stamped PDF quotes. $${PRICE_PER_MONTH} a month per company, ${TRIAL_DAYS}-day free trial.`;
+
 export const metadata: Metadata = {
-  title: "Agreement Calculator · Price managed services agreements and prove the margin",
-  description: `Pricing for MSPs: your COGS, your margin policy, leadership approval on anything off-policy, and stamped PDFs. $${PRICE_PER_MONTH} a month per company with a ${TRIAL_DAYS}-day free trial.`,
+  title: { absolute: TITLE },
+  description: DESCRIPTION,
+  keywords: [
+    "MSP agreement pricing",
+    "managed services quoting software",
+    "MSP pricing calculator",
+    "managed services margin",
+    "per-user pricing model",
+    "MSP quote approval",
+  ],
   robots: { index: true, follow: true },
   alternates: { canonical: "/" },
+  // A page's `openGraph` replaces the layout's rather than merging into it, so
+  // the site-level fields are repeated here.
+  openGraph: {
+    type: "website",
+    siteName: PRODUCT_NAME,
+    locale: "en_US",
+    title: TITLE,
+    description: DESCRIPTION,
+    url: "/",
+  },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
 };
 
 const PROBLEM = [
@@ -196,6 +219,21 @@ export default async function Home() {
           </div>
         </section>
 
+        <section id="faq" className="border-y border-mist bg-white">
+          <div className="mx-auto max-w-content px-6 py-20 md:px-10">
+            <p className="eyebrow">Questions</p>
+            <h2 className="mt-3 text-[32px] leading-9">What owners ask before they move off the spreadsheet</h2>
+            <dl className="mt-10 grid gap-6 md:grid-cols-2">
+              {FAQ.map((entry) => (
+                <div key={entry.question} className="card">
+                  <dt className="font-display text-[18px] font-bold leading-6 text-navy">{entry.question}</dt>
+                  <dd className="mt-2 text-slate">{entry.answer}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        </section>
+
         <section className="bg-navy">
           <div className="mx-auto flex max-w-content flex-wrap items-center justify-between gap-6 px-6 py-16 md:px-10">
             <div>
@@ -214,6 +252,8 @@ export default async function Home() {
       </main>
 
       <MarketingFooter />
+
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: landingJsonLd() }} />
     </div>
   );
 }

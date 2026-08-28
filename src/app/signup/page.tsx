@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { PRICING_MODELS } from "@/lib/pricing/models";
+import { PRODUCT_NAME } from "@/lib/seo";
 import { rootDomain, slugFromHost } from "@/lib/tenant";
 import { PRICE_PER_MONTH, TRIAL_DAYS } from "@/lib/trial";
 import { MarketingHeader } from "@/components/marketing-chrome";
@@ -10,10 +11,23 @@ import { SignupForm } from "./signup-form";
 
 export const dynamic = "force-dynamic";
 
+const TITLE = `Start a ${TRIAL_DAYS}-day free trial`;
+const DESCRIPTION = `Create your MSP pricing workspace: your own costs and margin policy, published pricing versions and approval. $${PRICE_PER_MONTH} a month per company, ${TRIAL_DAYS}-day free trial, no card required.`;
+
 export const metadata: Metadata = {
-  title: `Start a ${TRIAL_DAYS}-day trial · Agreement Calculator`,
-  description: `Price managed services agreements with your own costs and margin policy. $${PRICE_PER_MONTH} a month per company, ${TRIAL_DAYS}-day free trial, no card required.`,
+  title: TITLE,
+  description: DESCRIPTION,
   robots: { index: true, follow: true },
+  alternates: { canonical: "/signup" },
+  openGraph: {
+    type: "website",
+    siteName: PRODUCT_NAME,
+    locale: "en_US",
+    title: TITLE,
+    description: DESCRIPTION,
+    url: "/signup",
+  },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
 };
 
 export default async function SignupPage() {

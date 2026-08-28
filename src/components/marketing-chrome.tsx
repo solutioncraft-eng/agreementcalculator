@@ -17,6 +17,9 @@ export function MarketingHeader({ cta = true }: { cta?: boolean }) {
           <Link href="#pricing" className="hidden text-slate hover:text-navy sm:block">
             Pricing
           </Link>
+          <Link href="/#faq" className="hidden text-slate hover:text-navy md:block">
+            FAQ
+          </Link>
           <Link href="/login" className="font-medium text-navy hover:text-orange">
             Sign in
           </Link>
