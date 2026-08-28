@@ -1,7 +1,13 @@
 import type { ReactElement } from "react";
 import { Document, Image, Page, Text, View, type DocumentProps } from "@react-pdf/renderer";
 import type { CalcResult } from "@/lib/pricing/engine";
-import { includedLines, money, moneyRounded, tierResultFor } from "@/lib/pricing/engine";
+import {
+  achievedSgmPct,
+  includedLines,
+  money,
+  moneyRounded,
+  tierResultFor,
+} from "@/lib/pricing/engine";
 import { approvalLabel, type StampInfo } from "./stamp";
 import { brand, styles } from "./theme";
 
@@ -346,6 +352,10 @@ export function CogsDocument({ result, tierKey, clientName, notes, stamp, worksp
             <Text>
               {money(t.headlineRate)} ({money(t.headlinePerUser)}/user)
             </Text>
+          </View>
+          <View style={styles.rowTotal}>
+            <Text>Actual gross margin</Text>
+            <Text>{achievedSgmPct(t)}%</Text>
           </View>
           <View style={[styles.row, { marginTop: 6 }]}>
             <Text style={styles.rowMuted}>

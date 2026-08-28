@@ -3,6 +3,7 @@
 import { useActionState, useMemo, useState } from "react";
 import clsx from "clsx";
 import {
+  achievedSgmPct,
   includedLines,
   money,
   moneyRounded,
@@ -43,6 +44,7 @@ export function CalculatorClient({
     setInputs((prev) => ({ ...prev, [key]: value }));
 
   const selected = tierResultFor(result, tierKey);
+  const actualSgmPct = achievedSgmPct(selected);
   const baseKey = result.tiers[0]?.key;
 
   async function runExport(docType: "QUOTE" | "COGS") {
@@ -97,71 +99,76 @@ export function CalculatorClient({
           </section>
 
           <section className="card">
-            <h2 className="text-[18px]">Pricing levers</h2>
-            <div className="mt-4 space-y-5">
-              {config.model === "COST_PLUS" ? (
-                <div>
-                  <div className="flex items-baseline justify-between">
-                    <label className="label" htmlFor="sgm">
-                      Service gross margin
-                    </label>
-                    <span
-                      className={clsx(
-                        "font-display text-[18px] font-bold",
-                        inputs.sgmPct === config.settings.defaultSgmPct ? "text-navy" : "text-orange",
-                      )}
-                    >
-                      {inputs.sgmPct}%
-                    </span>
-                  </div>
-                  <input
-                    id="sgm"
-                    type="range"
-                    min={0}
-                    max={config.settings.maxSgmPct}
-                    step={1}
-                    value={inputs.sgmPct}
-                    onChange={(e) => set("sgmPct", Number(e.target.value))}
-                    className="mt-2 w-full"
-                  />
-                  <p className="mt-1 text-[12px] text-slate">
-                    Default {config.settings.defaultSgmPct}% · derived multiplier{" "}
-                    {result.multiplier.toFixed(2)}×
-                  </p>
+            {config.model === "COST_PLUS" ? (
+              <>
+                <div className="flex items-baseline justify-between">
+                  <h2 className="text-[18px]">Service gross margin</h2>
+                  <span
+                    className={clsx(
+                      "font-display text-[18px] font-bold",
+                      inputs.sgmPct === config.settings.defaultSgmPct ? "text-navy" : "text-orange",
+                    )}
+                  >
+                    {inputs.sgmPct}%
+                  </span>
                 </div>
-              ) : (
-                <div>
-                  <div className="flex items-baseline justify-between">
-                    <label className="label" htmlFor="markup">
-                      Markup on tool cost
-                    </label>
-                    <span
-                      className={clsx(
-                        "font-display text-[18px] font-bold",
-                        inputs.markupMultiple === config.settings.defaultMarkup
-                          ? "text-navy"
-                          : "text-orange",
-                      )}
-                    >
-                      {inputs.markupMultiple.toFixed(2)}×
-                    </span>
-                  </div>
-                  <input
-                    id="markup"
-                    type="range"
-                    min={1}
-                    max={Math.max(config.settings.defaultMarkup * 2, 8)}
-                    step={0.05}
-                    value={inputs.markupMultiple}
-                    onChange={(e) => set("markupMultiple", Number(e.target.value))}
-                    className="mt-2 w-full"
-                  />
-                  <p className="mt-1 text-[12px] text-slate">
-                    Default {config.settings.defaultMarkup}× · review below {config.settings.minMarkup}×
-                  </p>
+                <input
+                  id="sgm"
+                  type="range"
+                  min={0}
+                  max={config.settings.maxSgmPct}
+                  step={1}
+                  value={inputs.sgmPct}
+                  onChange={(e) => set("sgmPct", Number(e.target.value))}
+                  className="mt-3 w-full"
+                  aria-label="Service gross margin"
+                />
+                <p className="mt-1 text-[12px] text-slate">
+                  Default {config.settings.defaultSgmPct}% · derived multiplier{" "}
+                  {result.multiplier.toFixed(2)}×
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="flex items-baseline justify-between">
+                  <h2 className="text-[18px]">Markup on tool cost</h2>
+                  <span
+                    className={clsx(
+                      "font-display text-[18px] font-bold",
+                      inputs.markupMultiple === config.settings.defaultMarkup
+                        ? "text-navy"
+                        : "text-orange",
+                    )}
+                  >
+                    {inputs.markupMultiple.toFixed(2)}×
+                  </span>
                 </div>
-              )}
+                <input
+                  id="markup"
+                  type="range"
+                  min={1}
+                  max={Math.max(config.settings.defaultMarkup * 2, 8)}
+                  step={0.05}
+                  value={inputs.markupMultiple}
+                  onChange={(e) => set("markupMultiple", Number(e.target.value))}
+                  className="mt-3 w-full"
+                  aria-label="Markup on tool cost"
+                />
+                <p className="mt-1 text-[12px] text-slate">
+                  Default {config.settings.defaultMarkup}× · review below{" "}
+                  {config.settings.minMarkup}×
+                </p>
+              </>
+            )}
+            <p className="mt-2 text-[12px] text-slate">
+              Actual margin at the quoted rate{" "}
+              <span className="font-display font-bold text-navy">{actualSgmPct}%</span>
+            </p>
+          </section>
 
+          <section className="card">
+            <h2 className="text-[18px]">Pricing floors</h2>
+            <div className="mt-4 space-y-5">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="label" htmlFor="floor">
@@ -381,6 +388,7 @@ export function CalculatorClient({
                     />
                   ) : null}
                   <Line label="Agreement rate" value={money(selected.headlineRate)} strong />
+                  <Line label="Actual gross margin" value={`${actualSgmPct}%`} strong />
                 </dl>
 
                 <div className="mt-4 flex gap-1 overflow-hidden rounded-brand text-center font-display text-[11px] font-bold uppercase tracking-eyebrow text-white">

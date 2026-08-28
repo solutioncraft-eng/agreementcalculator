@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import type { PricingVersion, QuoteRequest, QuoteReview, User } from "@prisma/client";
-import { money, moneyRounded } from "@/lib/pricing/engine";
+import { achievedSgmPct, money, moneyRounded } from "@/lib/pricing/engine";
 import { calculate } from "@/lib/pricing/models";
 import { getConfigForVersion } from "@/lib/pricing/config";
 import type { TenantDb } from "@/lib/db";
@@ -79,7 +79,7 @@ export async function QuoteDetail({ quote, db }: { quote: QuoteWithRelations; db
             <Stat label="Markup multiple" value={`${quote.markupMultiple.toNumber()}×`} />
           ) : (
             <>
-              <Stat label="Service gross margin" value={`${quote.sgmPct.toNumber()}%`} />
+              <Stat label="Target service gross margin" value={`${quote.sgmPct.toNumber()}%`} />
               <Stat label="Add-on multiplier" value={`${quote.addonMultiplier.toNumber()}×`} />
             </>
           )}
@@ -140,6 +140,7 @@ export async function QuoteDetail({ quote, db }: { quote: QuoteWithRelations; db
               />
             ) : null}
             <Row label="Agreement rate" value={money(tier.headlineRate)} strong />
+            <Row label="Actual gross margin" value={`${achievedSgmPct(tier)}%`} strong />
             {alternatives.map((alternative) => (
               <Row
                 key={alternative.key}

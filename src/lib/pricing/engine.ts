@@ -250,6 +250,18 @@ export function tierResultFor(result: CalcResult, key: string): TierResult {
   return result.tiers.find((t) => t.key === key) ?? result.tiers[0];
 }
 
+/**
+ * Gross margin actually achieved at the rate being quoted, i.e. after the
+ * bundle discount, the discount cap and the per-user floor have moved the rate
+ * away from what the model's lever asked for. Measured against the tier's cost
+ * floor, so cost-plus reads as margin over tool plus imputed labor and markup
+ * as margin over tool cost.
+ */
+export function achievedSgmPct(tier: TierResult): number {
+  if (tier.headlineRate <= 0) return 0;
+  return round2((1 - tier.costFloor / tier.headlineRate) * 100);
+}
+
 /** Every line included in an offering: its own, plus every tier below it. */
 export function includedLines(result: CalcResult, key: string): LineResult[] {
   const index = tierResultFor(result, key).index;
