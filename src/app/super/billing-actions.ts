@@ -134,6 +134,8 @@ export async function endComplimentary(_prev: SuperState, formData: FormData): P
  *
  * A lapsed subscription is cleared at the same time, because otherwise the
  * cancelled state would keep the paywall up and the new trial would be a lie.
+ * Any comp rationale goes with it, so it cannot outlive the arrangement it
+ * described.
  * The Stripe customer is kept, so subscribing later reuses the same billing
  * relationship and invoice history.
  */
@@ -159,6 +161,8 @@ export async function resetTrial(_prev: SuperState, formData: FormData): Promise
       subscriptionStatus: null,
       stripeSubscriptionId: null,
       currentPeriodEnd: null,
+      compReason: null,
+      compExpiresAt: null,
     },
   });
 
