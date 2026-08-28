@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
-import { FAQ, PRODUCT_NAME, landingJsonLd } from "@/lib/seo";
+import { FAQ, PRODUCT_NAME, absoluteUrl, landingJsonLd } from "@/lib/seo";
 import { slugFromHost } from "@/lib/tenant";
 import { PRICE_PER_MONTH, TRIAL_DAYS } from "@/lib/trial";
 import { LogoMark } from "@/components/logo";
@@ -25,7 +25,9 @@ export const metadata: Metadata = {
     "MSP quote approval",
   ],
   robots: { index: true, follow: true },
-  alternates: { canonical: "/" },
+  // Absolute, so the canonical keeps the trailing slash the sitemap and the
+  // structured data use.
+  alternates: { canonical: absoluteUrl("/") },
   // A page's `openGraph` replaces the layout's rather than merging into it, so
   // the site-level fields are repeated here.
   openGraph: {
@@ -34,7 +36,7 @@ export const metadata: Metadata = {
     locale: "en_US",
     title: TITLE,
     description: DESCRIPTION,
-    url: "/",
+    url: absoluteUrl("/"),
   },
   twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
 };
