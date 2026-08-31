@@ -48,7 +48,8 @@ export const cogsItemSchema = z.object({
   label: z.string().trim().min(2).max(80),
   vendor: z.string().trim().max(80).optional().or(z.literal("")),
   unit: unitSchema,
-  tierKey: tierKeySchema,
+  /** The offerings this item is part of. An item may serve several. */
+  tierKeys: z.array(tierKeySchema).min(1, "Pick at least one offering.").max(24),
   unitCost: z.coerce.number().min(0).max(100_000),
   active: z.coerce.boolean().optional(),
   sortOrder: z.coerce.number().int().min(0).max(999).optional(),
@@ -80,6 +81,8 @@ export const serviceTierSchema = z.object({
   label: z.string().trim().min(2, "Name the offering.").max(40),
   description: z.string().trim().max(120).optional().or(z.literal("")),
   sortOrder: z.coerce.number().int().min(0).max(999).optional(),
+  /** The offering this one builds on. Empty means it stands alone. */
+  parentKey: tierKeySchema.optional().or(z.literal("")),
 });
 
 /**

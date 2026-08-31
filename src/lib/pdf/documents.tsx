@@ -6,6 +6,7 @@ import {
   includedLines,
   money,
   moneyRounded,
+  tierChain,
   tierResultFor,
 } from "@/lib/pricing/engine";
 import { approvalLabel, type StampInfo } from "./stamp";
@@ -289,9 +290,9 @@ export function QuoteDocument({ result, tierKey, clientName, notes, stamp, works
 export function CogsDocument({ result, tierKey, clientName, notes, stamp, workspace, logo }: DocProps) {
   const t = tierResultFor(result, tierKey);
   const tierName = t.label;
-  // Cumulative: the selected offering carries every lower offering's items too.
+  // The offering carries its whole parent chain's items on top of its own.
   const lines = includedLines(result, t.key);
-  const baseKey = result.tiers[0]?.key;
+  const baseKey = tierChain(result.tiers, t.key)[0]?.key;
   const tierLabel = (key: string) => result.tiers.find((tier) => tier.key === key)?.label ?? key;
   const pending = stamp.approvalState === "PENDING_APPROVAL";
 

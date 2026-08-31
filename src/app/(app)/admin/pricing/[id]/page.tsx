@@ -14,7 +14,7 @@ export default async function PricingVersionPage({ params }: { params: Promise<{
     where: { id },
     include: {
       serviceTiers: { orderBy: { sortOrder: "asc" } },
-      cogsItems: { orderBy: [{ tierKey: "asc" }, { sortOrder: "asc" }] },
+      cogsItems: { orderBy: { sortOrder: "asc" }, include: { tiers: true } },
       bundles: { orderBy: { sortOrder: "asc" } },
       createdBy: { select: { name: true } },
       publishedBy: { select: { name: true } },
@@ -46,13 +46,14 @@ export default async function PricingVersionPage({ params }: { params: Promise<{
           key: tier.key,
           label: tier.label,
           description: tier.description,
+          parentKey: tier.parentKey,
         }))}
         items={version.cogsItems.map((item) => ({
           id: item.id,
           label: item.label,
           vendor: item.vendor,
           unit: item.unit,
-          tierKey: item.tierKey,
+          tierKeys: item.tiers.map((membership) => membership.tierKey),
           unitCost: item.unitCost.toNumber(),
           active: item.active,
           sortOrder: item.sortOrder,

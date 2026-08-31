@@ -14,11 +14,12 @@
  * so adding one is additive: a settings type, a calculate function and a set
  * of approval triggers. Nothing outside this directory branches on the model.
  *
- * A version defines its own ordered offerings (service tiers). They are
- * cumulative: the lowest is the base everything is built from, and each one
- * above it adds its own COGS items on top of every tier below, priced with the
- * add-on multiplier rather than the base one. {@link priceTiers} owns that
- * arithmetic for every model, so a model only decides three multipliers.
+ * A version defines its own offerings (service tiers). An offering either
+ * stands alone — priced from the COGS items assigned to it — or builds on a
+ * parent, in which case it includes its whole parent chain's items and the
+ * items it adds are priced with the add-on multiplier rather than the base one.
+ * {@link priceTiers} owns that arithmetic for every model, so a model only
+ * decides three multipliers.
  */
 
 export type Unit = "USER" | "DEVICE" | "LOCATION" | "FLAT";
@@ -30,6 +31,8 @@ export interface ServiceTierDef {
   label: string;
   description?: string | null;
   sortOrder?: number;
+  /** Key of the offering this one builds on. Null/undefined when standalone. */
+  parentKey?: string | null;
 }
 
 export interface CogsLine {
@@ -37,7 +40,8 @@ export interface CogsLine {
   label: string;
   vendor?: string | null;
   unit: Unit;
-  tierKey: string;
+  /** Every offering this item is assigned to, by ServiceTier.key. */
+  tierKeys: string[];
   unitCost: number;
   sortOrder?: number;
 }
@@ -83,7 +87,7 @@ interface ConfigBase {
   costBasis: string;
   items: CogsLine[];
   bundles: BundleOption[];
-  /** The version's offerings, cheapest first. Always at least one. */
+  /** The version's offerings, in display order. Always at least one. */
   tiers: ServiceTierDef[];
 }
 
@@ -129,6 +133,8 @@ export interface Trigger {
 }
 
 export interface LineResult extends CogsLine {
+  /** The offering this line was priced under: its own, not an inherited one. */
+  tierKey: string;
   quantity: number;
   monthlyCost: number;
 }
@@ -137,8 +143,10 @@ export interface TierResult {
   key: string;
   label: string;
   description?: string | null;
-  /** Position in the ladder; 0 is the base offering. */
+  /** Position in display order. */
   index: number;
+  /** The offering this one builds on, or null when it stands alone. */
+  parentKey: string | null;
   /** Monthly tool cost — confidential, cumulative with the tiers below. */
   toolCost: number;
   /** The rate can never fall below this. Cost-plus adds imputed labor. */
@@ -154,11 +162,11 @@ export interface TierResult {
   headlinePerUser: number;
   belowFloor: boolean;
   discountCappedAtCost: boolean;
-  /** This tier's own COGS lines. The tiers below it carry the rest. */
+  /** This tier's own COGS lines. Its parent chain carries the rest. */
   lines: LineResult[];
 }
 
-/** A step up from one offering to the next in the ladder. */
+/** A step up from a parent offering to the one built on it. */
 export interface TierDelta {
   fromKey: string;
   toKey: string;
@@ -186,9 +194,9 @@ export interface CalcResult {
    * margin; markup has no imputed labor, so labor is zero.
    */
   split: { toolPct: number; laborPct: number; sgmPct: number };
-  /** Every offering priced, cheapest first. Never empty. */
+  /** Every offering priced, in display order. Never empty. */
   tiers: TierResult[];
-  /** One entry per step up the ladder, so one fewer than `tiers`. */
+  /** One entry per offering that builds on a parent. */
   deltas: TierDelta[];
   floorRate: number;
   triggers: Trigger[];
@@ -232,17 +240,37 @@ export function bundleFor(config: PricingConfig, key: string): BundleOption {
 
 export function linesFor(config: PricingConfig, tierKey: string, inputs: CalcInputs): LineResult[] {
   return config.items
-    .filter((it) => it.tierKey === tierKey)
+    .filter((it) => it.tierKeys.includes(tierKey))
     .map((it) => {
       const quantity = quantityFor(it.unit, inputs);
-      return { ...it, quantity, monthlyCost: it.unitCost * quantity };
+      return { ...it, tierKey, quantity, monthlyCost: it.unitCost * quantity };
     })
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
 }
 
-/** The version's offerings in ladder order, cheapest first. */
+/** The version's offerings in display order. */
 export function orderedTiers(config: PricingConfig): ServiceTierDef[] {
   return [...config.tiers].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+}
+
+/**
+ * An offering's parent chain, root first and the offering itself last. A cycle
+ * or a parent that names an offering the version does not define is treated as
+ * the chain ending there, so a broken draft still prices rather than hanging.
+ */
+export function tierChain(tiers: ServiceTierDef[], key: string): ServiceTierDef[] {
+  const chain: ServiceTierDef[] = [];
+  const seen = new Set<string>();
+  let current = tiers.find((tier) => tier.key === key);
+
+  while (current && !seen.has(current.key)) {
+    seen.add(current.key);
+    chain.unshift(current);
+    const parentKey = current.parentKey;
+    current = parentKey ? tiers.find((tier) => tier.key === parentKey) : undefined;
+  }
+
+  return chain;
 }
 
 /** The offering a key names, or the base offering when it names none. */
@@ -262,10 +290,22 @@ export function achievedSgmPct(tier: TierResult): number {
   return round2((1 - tier.costFloor / tier.headlineRate) * 100);
 }
 
-/** Every line included in an offering: its own, plus every tier below it. */
+/**
+ * Every line included in an offering: its own, plus its parent chain's. An item
+ * assigned to more than one offering in the chain is counted once, at the
+ * offering closest to the root, which is where it is priced.
+ */
 export function includedLines(result: CalcResult, key: string): LineResult[] {
-  const index = tierResultFor(result, key).index;
-  return result.tiers.filter((t) => t.index <= index).flatMap((t) => t.lines);
+  const chain = tierChain(result.tiers, tierResultFor(result, key).key);
+  const seen = new Set<string>();
+
+  return chain
+    .flatMap((tier) => result.tiers.find((t) => t.key === tier.key)?.lines ?? [])
+    .filter((line) => {
+      if (seen.has(line.key)) return false;
+      seen.add(line.key);
+      return true;
+    });
 }
 
 /**
@@ -301,10 +341,12 @@ export interface TierPricing {
 }
 
 /**
- * Prices the whole offering ladder. Every tier is cumulative: its cost floor
- * and rate include everything the tiers below it contain, so a tier can never
- * come out cheaper than the one under it, and the two-tier case reduces to the
- * original base + add-ons arithmetic exactly.
+ * Prices every offering the version defines. An offering carries the COGS items
+ * of its parent chain on top of its own: the chain's root is priced with the
+ * base multiplier (cost-plus imputes labor on it), everything the chain adds
+ * above the root with the add-on multiplier. A standalone offering is its own
+ * root, and a strict ladder — every offering parented to the one below it —
+ * reduces to the original cumulative arithmetic exactly.
  */
 export function priceTiers(
   config: PricingConfig,
@@ -315,13 +357,23 @@ export function priceTiers(
   const users = Math.max(inputs.users, 1);
   const floorRate = inputs.perUserFloor * users;
 
-  let baseTool = 0;
-  let addonTool = 0;
   const tiers = defs.map((def, index) => {
+    const chain = tierChain(defs, def.key);
     const lines = linesFor(config, def.key, inputs);
-    const ownTool = lines.reduce((sum, line) => sum + line.monthlyCost, 0);
-    if (index === 0) baseTool = ownTool;
-    else addonTool += ownTool;
+
+    // An item assigned to several offerings in the chain is priced once, at the
+    // offering nearest the root, so sharing a tool never charges for it twice.
+    const counted = new Set<string>();
+    let baseTool = 0;
+    let addonTool = 0;
+    chain.forEach((member, depth) => {
+      for (const line of linesFor(config, member.key, inputs)) {
+        if (counted.has(line.key)) continue;
+        counted.add(line.key);
+        if (depth === 0) baseTool += line.monthlyCost;
+        else addonTool += line.monthlyCost;
+      }
+    });
 
     const costFloor = baseTool * pricing.costMultiplier + addonTool;
     const standardRate = baseTool * pricing.baseMultiplier + addonTool * pricing.addonMultiplier;
@@ -333,6 +385,7 @@ export function priceTiers(
       label: def.label,
       description: def.description,
       index,
+      parentKey: chain.length > 1 ? chain[chain.length - 2].key : null,
       toolCost: baseTool + addonTool,
       costFloor,
       standardRate,
@@ -347,18 +400,21 @@ export function priceTiers(
     };
   });
 
-  const deltas = tiers.slice(1).map((tier, i) => {
-    const previous = tiers[i];
-    return {
-      fromKey: previous.key,
-      toKey: tier.key,
-      toolCost: tier.toolCost - previous.toolCost,
-      standardRate: tier.standardRate - previous.standardRate,
-      discountedRate: tier.discountedRate - previous.discountedRate,
-      perUser: (tier.discountedRate - previous.discountedRate) / users,
-      headlineRate: tier.headlineRate - previous.headlineRate,
-      headlinePerUser: (tier.headlineRate - previous.headlineRate) / users,
-    };
+  const deltas = tiers.flatMap((tier) => {
+    const parent = tier.parentKey ? tiers.find((t) => t.key === tier.parentKey) : undefined;
+    if (!parent) return [];
+    return [
+      {
+        fromKey: parent.key,
+        toKey: tier.key,
+        toolCost: tier.toolCost - parent.toolCost,
+        standardRate: tier.standardRate - parent.standardRate,
+        discountedRate: tier.discountedRate - parent.discountedRate,
+        perUser: (tier.discountedRate - parent.discountedRate) / users,
+        headlineRate: tier.headlineRate - parent.headlineRate,
+        headlinePerUser: (tier.headlineRate - parent.headlineRate) / users,
+      },
+    ];
   });
 
   return { tiers, deltas, floorRate, users };

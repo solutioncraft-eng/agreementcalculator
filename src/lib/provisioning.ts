@@ -106,10 +106,13 @@ export async function provisionWorkspace(input: ProvisionInput): Promise<Provisi
         },
         cogsItems: input.seedCatalog
           ? {
-              create: SEED_COGS_ITEMS.map((item, index) => ({
+              create: SEED_COGS_ITEMS.map(({ tierKeys, ...item }, index) => ({
                 ...item,
                 tenantId: tenant.id,
                 sortOrder: index,
+                tiers: {
+                  create: tierKeys.map((tierKey) => ({ tenantId: tenant.id, tierKey })),
+                },
               })),
             }
           : undefined,

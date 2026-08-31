@@ -1,11 +1,17 @@
-import type { BundleDiscount, CogsItem, PricingVersion, ServiceTier } from "@prisma/client";
+import type {
+  BundleDiscount,
+  CogsItem,
+  CogsItemTier,
+  PricingVersion,
+  ServiceTier,
+} from "@prisma/client";
 import type { TenantDb } from "@/lib/db";
 import { NO_BUNDLE, type PricingConfig } from "@/lib/pricing/engine";
 import { costPlusSettingsSchema, markupSettingsSchema } from "@/lib/pricing/models";
 
 export type VersionWithChildren = PricingVersion & {
   serviceTiers: ServiceTier[];
-  cogsItems: CogsItem[];
+  cogsItems: (CogsItem & { tiers: CogsItemTier[] })[];
   bundles: BundleDiscount[];
 };
 
@@ -24,7 +30,7 @@ export function toConfig(version: VersionWithChildren): PricingConfig {
       label: item.label,
       vendor: item.vendor,
       unit: item.unit,
-      tierKey: item.tierKey,
+      tierKeys: item.tiers.map((tier) => tier.tierKey),
       unitCost: item.unitCost.toNumber(),
       sortOrder: item.sortOrder,
     }));
@@ -50,6 +56,7 @@ export function toConfig(version: VersionWithChildren): PricingConfig {
       label: tier.label,
       description: tier.description,
       sortOrder: tier.sortOrder,
+      parentKey: tier.parentKey,
     }));
 
   const base = {
@@ -66,7 +73,11 @@ export function toConfig(version: VersionWithChildren): PricingConfig {
     : { ...base, model: "MARKUP_MULTIPLE", settings: markupSettingsSchema.parse(version.settings) };
 }
 
-const include = { serviceTiers: true, cogsItems: true, bundles: true } as const;
+const include = {
+  serviceTiers: true,
+  cogsItems: { include: { tiers: true } },
+  bundles: true,
+} as const;
 
 /** The pricing version every new quote in this workspace is calculated against. */
 export async function getActivePricingVersion(db: TenantDb): Promise<VersionWithChildren | null> {
