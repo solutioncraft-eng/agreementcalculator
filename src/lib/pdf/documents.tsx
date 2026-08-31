@@ -3,9 +3,11 @@ import { Document, Image, Page, Text, View, type DocumentProps } from "@react-pd
 import type { CalcResult } from "@/lib/pricing/engine";
 import {
   achievedSgmPct,
+  costFloorLift,
   includedLines,
   money,
   moneyRounded,
+  ratesDiffer,
   tierChain,
   tierResultFor,
 } from "@/lib/pricing/engine";
@@ -245,9 +247,11 @@ export function QuoteDocument({ result, tierKey, clientName, notes, stamp, works
                   </Text>
                 </View>
                 <Text style={[styles.rowMuted, { marginTop: 2 }]}>
-                  {other.index > t.index ? "+" : "−"}
-                  {moneyRounded(Math.abs(other.headlineRate - t.headlineRate))} per month against {tierName}
-                  .
+                  {ratesDiffer(other.headlineRate, t.headlineRate)
+                    ? `${other.index > t.index ? "+" : "−"}${moneyRounded(
+                        Math.abs(other.headlineRate - t.headlineRate),
+                      )} per month against ${tierName}.`
+                    : `Same monthly rate as ${tierName}.`}
                 </Text>
               </View>
             ))}
@@ -377,6 +381,12 @@ export function CogsDocument({ result, tierKey, clientName, notes, stamp, worksp
               <Text>-{money(t.discount)}</Text>
             </View>
           ) : null}
+          {costFloorLift(t) > 0 ? (
+            <View style={styles.row}>
+              <Text>Lifted to the hard cost floor</Text>
+              <Text>{money(costFloorLift(t))}</Text>
+            </View>
+          ) : null}
           {t.belowFloor ? (
             <View style={styles.row}>
               <Text>Per-user floor applied ({money(result.inputs.perUserFloor)}/user)</Text>
@@ -407,8 +417,8 @@ export function CogsDocument({ result, tierKey, clientName, notes, stamp, worksp
             style={[styles.approvalBlock, workspace.accentColor ? { borderColor: workspace.accentColor } : {}]}
           >
             <Text style={styles.approvalTitle}>NON-STANDARD PRICING — LEADERSHIP REVIEW</Text>
-            {result.triggers.map((tr) => (
-              <Text key={tr.code} style={{ marginTop: 3 }}>
+            {result.triggers.map((tr, index) => (
+              <Text key={`${tr.code}-${index}`} style={{ marginTop: 3 }}>
                 · {tr.message}
               </Text>
             ))}

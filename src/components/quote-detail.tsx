@@ -96,14 +96,14 @@ export async function QuoteDetail({ quote, db }: { quote: QuoteWithRelations; db
           <p className="eyebrow">Why this needs approval</p>
           <ul className="mt-3 space-y-1 text-[14px]">
             {(result?.triggers ?? []).length
-              ? result!.triggers.map((t) => (
-                  <li key={t.code} className="flex gap-2">
+              ? result!.triggers.map((t, index) => (
+                  <li key={`${t.code}-${index}`} className="flex gap-2">
                     <span className="text-orange">▸</span>
                     <span>{t.message}</span>
                   </li>
                 ))
-              : quote.triggers.map((code) => (
-                  <li key={code} className="flex gap-2">
+              : quote.triggers.map((code, index) => (
+                  <li key={`${code}-${index}`} className="flex gap-2">
                     <span className="text-orange">▸</span>
                     <span>{TRIGGER_LABEL[code] ?? code}</span>
                   </li>

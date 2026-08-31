@@ -4,8 +4,10 @@ import { useActionState, useMemo, useState } from "react";
 import clsx from "clsx";
 import {
   achievedSgmPct,
+  costFloorLift,
   includedLines,
   money,
+  ratesDiffer,
   tierChain,
   moneyRounded,
   tierResultFor,
@@ -274,8 +276,8 @@ export function CalculatorClient({
                 This configuration falls outside standard pricing
               </h2>
               <ul className="mt-3 space-y-1 text-[14px]">
-                {result.triggers.map((t) => (
-                  <li key={t.code} className="flex gap-2">
+                {result.triggers.map((t, index) => (
+                  <li key={`${t.code}-${index}`} className="flex gap-2">
                     <span className="text-orange">▸</span>
                     <span>{t.message}</span>
                   </li>
@@ -311,7 +313,7 @@ export function CalculatorClient({
                   onSelect={() => setTierKey(tierResult.key)}
                   footnote={
                     step && previous
-                      ? step.headlineRate > 0.5
+                      ? ratesDiffer(tierResult.headlineRate, previous.headlineRate)
                         ? `+${moneyRounded(step.headlineRate)}/mo over ${previous.label}`
                         : `Same rate as ${previous.label} at this floor`
                       : undefined
@@ -381,6 +383,12 @@ export function CalculatorClient({
                     <Line
                       label={`${result.bundle.label} discount${selected.discountCappedAtCost ? " (capped at cost)" : ""}`}
                       value={`-${money(selected.discount)}`}
+                    />
+                  ) : null}
+                  {costFloorLift(selected) > 0 ? (
+                    <Line
+                      label="Lifted to the hard cost floor"
+                      value={money(costFloorLift(selected))}
                     />
                   ) : null}
                   {selected.belowFloor ? (
