@@ -13,6 +13,7 @@ import {
   saveBundle,
   saveCogsItem,
   saveServiceTier,
+  setTierItems,
   updateVersion,
   type AdminState,
 } from "../actions";
@@ -180,8 +181,13 @@ export function VersionEditor({
   const [tierState, tierAction, savingTier] = useActionState<AdminState, FormData>(saveServiceTier, {});
   const [tierMoveState, tierMoveAction] = useActionState<AdminState, FormData>(moveServiceTier, {});
   const [tierDeleteState, tierDeleteAction] = useActionState<AdminState, FormData>(deleteServiceTier, {});
+  const [tierItemsState, tierItemsAction, savingTierItems] = useActionState<AdminState, FormData>(
+    setTierItems,
+    {},
+  );
   const [editing, setEditing] = useState<string | null>(null);
   const [editingTier, setEditingTier] = useState<string | null>(null);
+  const [pickingTier, setPickingTier] = useState<string | null>(null);
   const tierLabel = (key: string) => tiers.find((tier) => tier.key === key)?.label ?? key;
   const costing = costings(tiers, items);
 
@@ -272,6 +278,7 @@ export function VersionEditor({
             >
               {editingTier === tier.id ? (
                 <TierForm
+                  key={`${tier.id}-${tier.parentKey ?? "standalone"}`}
                   action={tierAction}
                   versionId={version.id}
                   tiers={tiers}
@@ -324,6 +331,13 @@ export function VersionEditor({
                       <button
                         type="button"
                         className="btn-ghost btn-sm"
+                        onClick={() => setPickingTier(pickingTier === tier.id ? null : tier.id)}
+                      >
+                        COGS items
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-ghost btn-sm"
                         onClick={() => setEditingTier(tier.id)}
                       >
                         Edit
@@ -339,6 +353,18 @@ export function VersionEditor({
                   ) : null}
                 </div>
               )}
+              {editable && editingTier !== tier.id ? (
+                <TierItemPicker
+                  key={`${tier.id}-${(costing.get(tier.key)?.own ?? []).map((item) => item.id).join(",")}`}
+                  action={tierItemsAction}
+                  versionId={version.id}
+                  tier={tier}
+                  items={items}
+                  pending={savingTierItems}
+                  open={pickingTier === tier.id || (costing.get(tier.key)?.own.length ?? 0) === 0}
+                  onClose={pickingTier === tier.id ? () => setPickingTier(null) : undefined}
+                />
+              ) : null}
             </li>
           ))}
           {tiers.length === 0 ? (
@@ -350,6 +376,7 @@ export function VersionEditor({
         {editable ? (
           <>
             <Feedback state={tierState} />
+            <Feedback state={tierItemsState} />
             <Feedback state={tierMoveState} />
             <Feedback state={tierDeleteState} />
           </>
@@ -570,6 +597,85 @@ export function VersionEditor({
         </p>
       </section>
     </div>
+  );
+}
+
+/**
+ * Asks which COGS items an offering carries itself. Opens on its own for an
+ * offering with an empty stack — a new one, or one just decoupled from its
+ * parent — because that offering has no costing until this is answered.
+ */
+function TierItemPicker({
+  action,
+  versionId,
+  tier,
+  items,
+  pending,
+  open,
+  onClose,
+}: {
+  action: (formData: FormData) => void;
+  versionId: string;
+  tier: TierView;
+  items: ItemView[];
+  pending: boolean;
+  open: boolean;
+  onClose?: () => void;
+}) {
+  if (!open) return null;
+
+  return (
+    <form action={action} className="mt-3 border-t border-mist pt-3">
+      <input type="hidden" name="versionId" value={versionId} />
+      <input type="hidden" name="tierKey" value={tier.key} />
+      <p className="label">Which COGS items does {tier.label} carry itself?</p>
+      <p className="mt-1 text-[13px] text-slate">
+        {tier.parentKey
+          ? `Everything ${tier.label} inherits stays inherited — tick only what it adds on top.`
+          : `${tier.label} stands alone, so it costs nothing until it carries items of its own.`}
+      </p>
+      {items.length === 0 ? (
+        <p className="mt-2 text-[13px] text-orange-dark">
+          This draft has no COGS items yet. Add one under COGS items below and tick {tier.label} there.
+        </p>
+      ) : (
+        <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {items.map((item) => (
+            <label
+              key={item.id}
+              className="flex items-start gap-2 rounded-brand border border-steel px-3 py-2 text-[13px]"
+            >
+              <input
+                type="checkbox"
+                name="itemIds"
+                value={item.id}
+                defaultChecked={item.tierKeys.includes(tier.key)}
+                className="mt-[3px] h-4 w-4 accent-orange"
+              />
+              <span>
+                {item.label}
+                <span className="block font-mono text-[11px] text-slate">
+                  {money(item.unitCost)}/{item.unit === "FLAT" ? "mo" : item.unit.toLowerCase()}
+                  {item.active ? "" : " · inactive"}
+                </span>
+              </span>
+            </label>
+          ))}
+        </div>
+      )}
+      <div className="mt-3 flex flex-wrap gap-2">
+        {items.length > 0 ? (
+          <button type="submit" className="btn-navy btn-sm" disabled={pending}>
+            {pending ? "Saving…" : `Save ${tier.label}'s items`}
+          </button>
+        ) : null}
+        {onClose ? (
+          <button type="button" className="btn-ghost btn-sm" onClick={onClose}>
+            Close
+          </button>
+        ) : null}
+      </div>
+    </form>
   );
 }
 

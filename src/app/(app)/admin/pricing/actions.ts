@@ -336,6 +336,67 @@ export async function deleteCogsItem(_prev: AdminState, formData: FormData): Pro
 }
 
 /**
+ * Sets the COGS items an offering carries itself, without touching the items'
+ * other offerings. This is how an offering with an empty stack — newly added,
+ * or just decoupled from the offering it used to build on — gets its costing.
+ */
+export async function setTierItems(_prev: AdminState, formData: FormData): Promise<AdminState> {
+  const { user, tenant, db } = await requireRole("ADMIN");
+  const versionId = String(formData.get("versionId") ?? "");
+  const tierKey = String(formData.get("tierKey") ?? "");
+  const chosen = new Set(formData.getAll("itemIds").map(String).filter(Boolean));
+
+  const version = await db.pricingVersion.findUnique({ where: { id: versionId } });
+  if (!version) return { error: "That pricing version no longer exists." };
+  if (version.status !== "DRAFT") {
+    return { error: "Published versions are immutable — create a new draft to change pricing." };
+  }
+
+  const tier = await db.serviceTier.findFirst({ where: { versionId, key: tierKey } });
+  if (!tier) return { error: "That offering is not part of this draft." };
+
+  const items = await db.cogsItem.findMany({ where: { versionId }, include: { tiers: true } });
+  if ([...chosen].some((id) => !items.some((item) => item.id === id))) {
+    return { error: "Choose COGS items that are part of this draft." };
+  }
+
+  const carries = (item: (typeof items)[number]) =>
+    item.tiers.some((membership) => membership.tierKey === tierKey);
+  const added = items.filter((item) => chosen.has(item.id) && !carries(item));
+  const removed = items.filter((item) => !chosen.has(item.id) && carries(item));
+  if (added.length === 0 && removed.length === 0) {
+    return { ok: `${tier.label} already carries exactly those items.` };
+  }
+
+  await db.$transaction([
+    ...(removed.length > 0
+      ? [db.cogsItemTier.deleteMany({ where: { tierKey, itemId: { in: removed.map((item) => item.id) } } })]
+      : []),
+    ...added.map((item) =>
+      db.cogsItemTier.create({ data: { tenantId: tenant.id, itemId: item.id, tierKey } }),
+    ),
+  ]);
+
+  await audit({
+    action: "SERVICE_TIER_UPDATED",
+    entity: "ServiceTier",
+    entityId: tier.key,
+    summary: `Offering "${tier.label}" now carries ${chosen.size} COGS item${
+      chosen.size === 1 ? "" : "s"
+    } of its own on draft ${version.label}`,
+    before: { ownItems: items.filter(carries).map((item) => item.key) },
+    after: { ownItems: items.filter((item) => chosen.has(item.id)).map((item) => item.key) },
+    tenantId: tenant.id,
+    actor: user,
+  });
+
+  revalidatePath(`/admin/pricing/${versionId}`);
+  return {
+    ok: `${tier.label} carries ${chosen.size} item${chosen.size === 1 ? "" : "s"} of its own.`,
+  };
+}
+
+/**
  * True when following `parentKey` from `key` ever comes back to where it
  * started — the one arrangement of parents the engine cannot price.
  */
