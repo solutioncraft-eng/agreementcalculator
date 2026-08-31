@@ -5,6 +5,13 @@
  */
 export type ApprovalState = "STANDARD" | "APPROVED" | "PENDING_APPROVAL";
 
+/** Who granted leadership approval, and when. */
+export interface ApprovalRecord {
+  by: string;
+  role: string;
+  at: Date;
+}
+
 export interface StampInfo {
   exportId: string;
   exportedAt: Date;
@@ -14,6 +21,9 @@ export interface StampInfo {
   costBasis: string;
   approvalState: ApprovalState;
   quoteRef?: string | null;
+  approval?: ApprovalRecord | null;
+  /** IANA zone of the exporting user, so dates read in their local time. */
+  timeZone?: string | null;
 }
 
 /** Human-readable approval state, carrying the quote reference when there is one. */

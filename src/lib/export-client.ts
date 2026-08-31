@@ -16,7 +16,10 @@ export interface ExportRequest {
  */
 export async function downloadExport(request: ExportRequest): Promise<string | null> {
   const body = new FormData();
-  body.set("payload", JSON.stringify(request));
+  body.set(
+    "payload",
+    JSON.stringify({ ...request, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
+  );
 
   const response = await fetch("/api/export", { method: "POST", body });
   if (!response.ok) {

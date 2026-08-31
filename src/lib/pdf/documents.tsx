@@ -11,7 +11,7 @@ import {
 import { approvalLabel, type StampInfo } from "./stamp";
 import { brand, styles } from "./theme";
 
-export { approvalLabel, type ApprovalState, type StampInfo } from "./stamp";
+export { approvalLabel, type ApprovalRecord, type ApprovalState, type StampInfo } from "./stamp";
 
 export type DocType = "QUOTE" | "COGS";
 
@@ -105,6 +105,39 @@ function Stamp({
   );
 }
 
+/** A date in the exporting user's zone, e.g. "31 Aug 2026, 09:12 PDT". */
+function local(d: Date, timeZone?: string | null): string {
+  return d.toLocaleString("en-US", {
+    timeZone: timeZone ?? "UTC",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZoneName: "short",
+  });
+}
+
+function ApprovalTimeline({ stamp }: { stamp: StampInfo }) {
+  if (!stamp.approval) return null;
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>APPROVAL</Text>
+      <View style={styles.timelineRow}>
+        <Text>
+          Approved by {stamp.approval.by} · {stamp.approval.role}
+        </Text>
+        <Text style={styles.rowMuted}>{local(stamp.approval.at, stamp.timeZone)}</Text>
+      </View>
+      {stamp.quoteRef ? (
+        <Text style={[styles.rowMuted, { marginTop: 4, fontSize: 8 }]}>
+          Recorded against quote {stamp.quoteRef} in the approval log.
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 function MetaGrid({ result }: { result: CalcResult }) {
   const cells: [string, string][] = [
     ["USERS", String(result.inputs.users)],
@@ -134,7 +167,6 @@ export function QuoteDocument({ result, tierKey, clientName, notes, stamp, works
   const tierName = t.label;
   const lower = result.tiers[t.index - 1];
   const others = result.tiers.filter((tier) => tier.key !== t.key);
-  const pending = stamp.approvalState === "PENDING_APPROVAL";
   const accent = workspace.accentColor ?? brand.orange;
 
   return (
@@ -147,7 +179,6 @@ export function QuoteDocument({ result, tierKey, clientName, notes, stamp, works
       keywords={`export:${stamp.exportId} pricing:${stamp.pricingVersion} approval:${approvalLabel(stamp)}`}
     >
       <Page size="LETTER" style={styles.page}>
-        {pending ? <Text style={styles.watermark}>PENDING APPROVAL</Text> : null}
         <Header
           stamp={stamp}
           clientName={clientName}
@@ -247,6 +278,8 @@ export function QuoteDocument({ result, tierKey, clientName, notes, stamp, works
           </Text>
         </View>
 
+        <ApprovalTimeline stamp={stamp} />
+
         <Stamp stamp={stamp} workspace={workspace} />
       </Page>
     </Document>
@@ -260,6 +293,7 @@ export function CogsDocument({ result, tierKey, clientName, notes, stamp, worksp
   const lines = includedLines(result, t.key);
   const baseKey = result.tiers[0]?.key;
   const tierLabel = (key: string) => result.tiers.find((tier) => tier.key === key)?.label ?? key;
+  const pending = stamp.approvalState === "PENDING_APPROVAL";
 
   return (
     <Document
@@ -271,6 +305,7 @@ export function CogsDocument({ result, tierKey, clientName, notes, stamp, worksp
       keywords={`export:${stamp.exportId} pricing:${stamp.pricingVersion} approval:${approvalLabel(stamp)}`}
     >
       <Page size="LETTER" style={styles.page}>
+        {pending ? <Text style={styles.watermark}>APPROVAL REQUIRED</Text> : null}
         <Header
           stamp={stamp}
           clientName={clientName}
@@ -388,6 +423,8 @@ export function CogsDocument({ result, tierKey, clientName, notes, stamp, worksp
             <Text style={styles.notes}>{notes}</Text>
           </View>
         ) : null}
+
+        <ApprovalTimeline stamp={stamp} />
 
         <Stamp stamp={stamp} workspace={workspace} />
       </Page>

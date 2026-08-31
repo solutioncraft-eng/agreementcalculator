@@ -45,6 +45,12 @@ export const styles = StyleSheet.create({
     padding: 10,
   },
   approvalTitle: { fontFamily: "Helvetica-Bold", color: "#C4520F", fontSize: 10 },
+  timelineRow: {
+    marginTop: 6,
+    borderLeftWidth: 2,
+    borderLeftColor: brand.orange,
+    paddingLeft: 8,
+  },
   section: { marginTop: 18 },
   sectionTitle: {
     fontSize: 8,

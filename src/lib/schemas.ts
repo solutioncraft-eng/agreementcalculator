@@ -28,6 +28,7 @@ export const exportPayloadSchema = z.object({
   notes: z.string().trim().max(2000).optional().or(z.literal("")),
   quoteId: z.string().trim().min(1).max(64).optional().or(z.literal("")),
   inputs: calcInputsSchema.optional(),
+  timeZone: z.string().trim().max(64).optional(),
 });
 
 export const submitQuoteSchema = z.object({
