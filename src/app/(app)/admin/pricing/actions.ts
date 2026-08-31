@@ -42,7 +42,7 @@ export async function createDraft(): Promise<void> {
   const source = await db.pricingVersion.findFirst({
     where: { status: "PUBLISHED" },
     orderBy: { publishedAt: "desc" },
-    include: { serviceTiers: true, cogsItems: true, bundles: true },
+    include: { serviceTiers: true, cogsItems: { include: { tiers: true } }, bundles: true },
   });
 
   const draft = await db.pricingVersion.create({
@@ -66,6 +66,7 @@ export async function createDraft(): Promise<void> {
               key: tier.key,
               label: tier.label,
               description: tier.description,
+              parentKey: tier.parentKey,
               sortOrder: tier.sortOrder,
             }))
           : SEED_SERVICE_TIERS.map((tier, index) => ({ ...tier, sortOrder: index }))
@@ -79,10 +80,17 @@ export async function createDraft(): Promise<void> {
               label: item.label,
               vendor: item.vendor,
               unit: item.unit,
-              tierKey: item.tierKey,
               unitCost: item.unitCost,
               active: item.active,
               sortOrder: item.sortOrder,
+              // Which offerings use the item is part of the pricing, so it is
+              // cloned with it rather than re-derived.
+              tiers: {
+                create: item.tiers.map((membership) => ({
+                  tenantId: tenant.id,
+                  tierKey: membership.tierKey,
+                })),
+              },
             })),
           }
         : undefined,
@@ -195,33 +203,49 @@ export async function saveCogsItem(_prev: AdminState, formData: FormData): Promi
     label: formData.get("label"),
     vendor: formData.get("vendor") ?? undefined,
     unit: formData.get("unit"),
-    tierKey: formData.get("tierKey"),
+    tierKeys: formData.getAll("tierKeys").map(String).filter(Boolean),
     unitCost: formData.get("unitCost"),
     active: formData.get("active") === "on" || formData.get("active") === "true",
     sortOrder: formData.get("sortOrder") ?? 0,
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the COGS item values." };
   const data = parsed.data;
+  const tierKeys = [...new Set(data.tierKeys)];
 
-  // An item may only be allocated to an offering this same draft defines.
-  const tier = await db.serviceTier.findFirst({ where: { versionId, key: data.tierKey } });
-  if (!tier) return { error: "Choose an offering that is part of this draft." };
+  // An item may only be allocated to offerings this same draft defines.
+  const tiers = await db.serviceTier.findMany({ where: { versionId, key: { in: tierKeys } } });
+  if (tiers.length !== tierKeys.length) {
+    return { error: "Choose offerings that are part of this draft." };
+  }
 
   if (itemId) {
-    const before = await db.cogsItem.findUnique({ where: { id: itemId } });
-    if (!before || before.versionId !== versionId) return { error: "That item is not part of this draft." };
-    await db.cogsItem.update({
+    const before = await db.cogsItem.findUnique({
       where: { id: itemId },
-      data: {
-        label: data.label,
-        vendor: data.vendor || null,
-        unit: data.unit,
-        tierKey: data.tierKey,
-        unitCost: data.unitCost,
-        active: data.active ?? true,
-        sortOrder: data.sortOrder ?? before.sortOrder,
-      },
+      include: { tiers: true },
     });
+    if (!before || before.versionId !== versionId) return { error: "That item is not part of this draft." };
+    const beforeKeys = before.tiers.map((membership) => membership.tierKey);
+    await db.$transaction([
+      db.cogsItem.update({
+        where: { id: itemId },
+        data: {
+          label: data.label,
+          vendor: data.vendor || null,
+          unit: data.unit,
+          unitCost: data.unitCost,
+          active: data.active ?? true,
+          sortOrder: data.sortOrder ?? before.sortOrder,
+        },
+      }),
+      db.cogsItemTier.deleteMany({
+        where: { itemId, tierKey: { notIn: tierKeys } },
+      }),
+      ...tierKeys
+        .filter((tierKey) => !beforeKeys.includes(tierKey))
+        .map((tierKey) =>
+          db.cogsItemTier.create({ data: { tenantId: tenant.id, itemId, tierKey } }),
+        ),
+    ]);
     await audit({
       action: "COGS_ITEM_UPDATED",
       entity: "CogsItem",
@@ -230,11 +254,11 @@ export async function saveCogsItem(_prev: AdminState, formData: FormData): Promi
       before: {
         label: before.label,
         unit: before.unit,
-        tierKey: before.tierKey,
+        tierKeys: beforeKeys,
         unitCost: before.unitCost.toString(),
         active: before.active,
       },
-      after: { ...data },
+      after: { ...data, tierKeys },
       tenantId: tenant.id,
       actor: user,
     });
@@ -254,10 +278,12 @@ export async function saveCogsItem(_prev: AdminState, formData: FormData): Promi
         label: data.label,
         vendor: data.vendor || null,
         unit: data.unit,
-        tierKey: data.tierKey,
         unitCost: data.unitCost,
         active: data.active ?? true,
         sortOrder: data.sortOrder ?? 100,
+        tiers: {
+          create: tierKeys.map((tierKey) => ({ tenantId: tenant.id, tierKey })),
+        },
       },
     });
     await audit({
@@ -265,7 +291,7 @@ export async function saveCogsItem(_prev: AdminState, formData: FormData): Promi
       entity: "CogsItem",
       entityId: key,
       summary: `COGS item "${data.label}" added to draft ${version.label} (${data.unit.toLowerCase()} basis)`,
-      after: { ...data, key },
+      after: { ...data, key, tierKeys },
       tenantId: tenant.id,
       actor: user,
     });
@@ -286,7 +312,7 @@ export async function deleteCogsItem(_prev: AdminState, formData: FormData): Pro
     return { error: "Published versions are immutable — create a new draft to change pricing." };
   }
 
-  const item = await db.cogsItem.findUnique({ where: { id: itemId } });
+  const item = await db.cogsItem.findUnique({ where: { id: itemId }, include: { tiers: true } });
   if (!item || item.versionId !== versionId) return { error: "That item is not part of this draft." };
 
   await db.cogsItem.delete({ where: { id: itemId } });
@@ -298,7 +324,7 @@ export async function deleteCogsItem(_prev: AdminState, formData: FormData): Pro
     before: {
       label: item.label,
       unit: item.unit,
-      tierKey: item.tierKey,
+      tierKeys: item.tiers.map((membership) => membership.tierKey),
       unitCost: item.unitCost.toString(),
     },
     tenantId: tenant.id,
@@ -310,8 +336,24 @@ export async function deleteCogsItem(_prev: AdminState, formData: FormData): Pro
 }
 
 /**
- * Adds or renames one of the draft's offerings. Keys are generated once and
- * never rewritten, because COGS items and submitted quotes point at them.
+ * True when following `parentKey` from `key` ever comes back to where it
+ * started — the one arrangement of parents the engine cannot price.
+ */
+function hasParentCycle(links: Map<string, string | null>, key: string): boolean {
+  const seen = new Set<string>();
+  let current: string | null | undefined = key;
+  while (current) {
+    if (seen.has(current)) return true;
+    seen.add(current);
+    current = links.get(current) ?? null;
+  }
+  return false;
+}
+
+/**
+ * Adds or renames one of the draft's offerings, and sets the offering it builds
+ * on. Keys are generated once and never rewritten, because COGS items and
+ * submitted quotes point at them.
  */
 export async function saveServiceTier(_prev: AdminState, formData: FormData): Promise<AdminState> {
   const { user, tenant, db } = await requireRole("ADMIN");
@@ -327,26 +369,40 @@ export async function saveServiceTier(_prev: AdminState, formData: FormData): Pr
   const parsed = serviceTierSchema.safeParse({
     label: formData.get("label"),
     description: formData.get("description") ?? undefined,
+    parentKey: formData.get("parentKey") ?? undefined,
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the offering." };
   const data = parsed.data;
+  const parentKey = data.parentKey || null;
 
   const tiers = await db.serviceTier.findMany({ where: { versionId }, orderBy: { sortOrder: "asc" } });
+
+  if (parentKey && !tiers.some((tier) => tier.key === parentKey)) {
+    return { error: "Build the offering on one this draft defines, or leave it standalone." };
+  }
 
   if (tierId) {
     const before = tiers.find((tier) => tier.id === tierId);
     if (!before) return { error: "That offering is not part of this draft." };
+    if (parentKey === before.key) return { error: "An offering cannot build on itself." };
+
+    const links = new Map(tiers.map((tier) => [tier.key, tier.parentKey]));
+    links.set(before.key, parentKey);
+    if (hasParentCycle(links, before.key)) {
+      return { error: `${data.label} would end up building on itself through its parents.` };
+    }
+
     await db.serviceTier.update({
       where: { id: tierId },
-      data: { label: data.label, description: data.description || null },
+      data: { label: data.label, description: data.description || null, parentKey },
     });
     await audit({
       action: "SERVICE_TIER_UPDATED",
       entity: "ServiceTier",
       entityId: before.key,
-      summary: `Offering "${before.label}" renamed to "${data.label}" on draft ${version.label}`,
-      before: { label: before.label, description: before.description },
-      after: { ...data },
+      summary: `Offering "${before.label}" updated to "${data.label}" on draft ${version.label}`,
+      before: { label: before.label, description: before.description, parentKey: before.parentKey },
+      after: { ...data, parentKey },
       tenantId: tenant.id,
       actor: user,
     });
@@ -366,6 +422,7 @@ export async function saveServiceTier(_prev: AdminState, formData: FormData): Pr
       key,
       label: data.label,
       description: data.description || null,
+      parentKey,
       sortOrder: (tiers.at(-1)?.sortOrder ?? -1) + 1,
     },
   });
@@ -373,8 +430,10 @@ export async function saveServiceTier(_prev: AdminState, formData: FormData): Pr
     action: "SERVICE_TIER_CREATED",
     entity: "ServiceTier",
     entityId: key,
-    summary: `Offering "${data.label}" added to draft ${version.label}`,
-    after: { ...data, key },
+    summary: `Offering "${data.label}" added to draft ${version.label}${
+      parentKey ? `, building on ${tiers.find((tier) => tier.key === parentKey)?.label}` : " as a standalone offering"
+    }`,
+    after: { ...data, key, parentKey },
     tenantId: tenant.id,
     actor: user,
   });
@@ -383,7 +442,7 @@ export async function saveServiceTier(_prev: AdminState, formData: FormData): Pr
   return { ok: `Added ${data.label}.` };
 }
 
-/** Moves an offering one step up or down the ladder. */
+/** Moves an offering one step up or down the display order. */
 export async function moveServiceTier(_prev: AdminState, formData: FormData): Promise<AdminState> {
   const { user, tenant, db } = await requireRole("ADMIN");
   const versionId = String(formData.get("versionId") ?? "");
@@ -400,7 +459,7 @@ export async function moveServiceTier(_prev: AdminState, formData: FormData): Pr
   const index = tiers.findIndex((tier) => tier.id === tierId);
   const target = index + direction;
   if (index < 0) return { error: "That offering is not part of this draft." };
-  if (target < 0 || target >= tiers.length) return { ok: "Already at the end of the ladder." };
+  if (target < 0 || target >= tiers.length) return { ok: "Already at the end of the list." };
 
   const reordered = [...tiers];
   [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
@@ -441,7 +500,18 @@ export async function deleteServiceTier(_prev: AdminState, formData: FormData): 
   if (!tier) return { error: "That offering is not part of this draft." };
   if (tiers.length === 1) return { error: "A version needs at least one offering." };
 
-  const items = await db.cogsItem.count({ where: { versionId, tierKey: tier.key } });
+  const children = tiers.filter((row) => row.parentKey === tier.key);
+  if (children.length > 0) {
+    return {
+      error: `${children.map((row) => row.label).join(", ")} build${
+        children.length === 1 ? "s" : ""
+      } on ${tier.label} — point ${children.length === 1 ? "it" : "them"} elsewhere first.`,
+    };
+  }
+
+  const items = await db.cogsItemTier.count({
+    where: { tierKey: tier.key, item: { versionId } },
+  });
   if (items > 0) {
     return {
       error: `Move the ${items} COGS item${items === 1 ? "" : "s"} in ${tier.label} to another offering first.`,
@@ -460,7 +530,7 @@ export async function deleteServiceTier(_prev: AdminState, formData: FormData): 
     entity: "ServiceTier",
     entityId: tier.key,
     summary: `Offering "${tier.label}" removed from draft ${version.label}`,
-    before: { label: tier.label, description: tier.description },
+    before: { label: tier.label, description: tier.description, parentKey: tier.parentKey },
     tenantId: tenant.id,
     actor: user,
   });
@@ -561,14 +631,34 @@ export async function publishVersion(_prev: AdminState, formData: FormData): Pro
   const tiers = await db.serviceTier.findMany({ where: { versionId } });
   if (tiers.length === 0) return { error: "Add at least one offering before publishing." };
 
-  const activeItems = await db.cogsItem.findMany({ where: { versionId, active: true } });
+  const activeItems = await db.cogsItem.findMany({
+    where: { versionId, active: true },
+    include: { tiers: true },
+  });
   if (activeItems.length === 0) return { error: "Add at least one active COGS item before publishing." };
 
   const keys = new Set(tiers.map((tier) => tier.key));
-  const orphan = activeItems.find((item) => !keys.has(item.tierKey));
+  const orphan = activeItems.find(
+    (item) =>
+      item.tiers.length === 0 || !item.tiers.some((membership) => keys.has(membership.tierKey)),
+  );
   if (orphan) {
     return { error: `"${orphan.label}" is not allocated to one of this version's offerings.` };
   }
+
+  // An offering with no items of its own is allowed — it sells its parent's
+  // stack under another name — but a parent the version does not define, or a
+  // parent loop, has no price at all.
+  const links = new Map(tiers.map((tier) => [tier.key, tier.parentKey]));
+  const danglingParent = tiers.find((tier) => tier.parentKey && !keys.has(tier.parentKey));
+  if (danglingParent) {
+    return { error: `"${danglingParent.label}" builds on an offering this version does not define.` };
+  }
+  const looped = tiers.find((tier) => hasParentCycle(links, tier.key));
+  if (looped) {
+    return { error: `"${looped.label}" ends up building on itself through its parents.` };
+  }
+
   const items = activeItems.length;
 
   const previous = await db.pricingVersion.findFirst({

@@ -22,6 +22,7 @@ export const TENANT_MODELS = new Set([
   "PricingVersion",
   "ServiceTier",
   "CogsItem",
+  "CogsItemTier",
   "BundleDiscount",
   "QuoteRequest",
   "QuoteReview",

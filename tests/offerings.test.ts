@@ -4,6 +4,7 @@ import {
   NO_BUNDLE,
   includedLines,
   orderedTiers,
+  tierChain,
   tierResultFor,
   type CalcInputs,
   type CogsLine,
@@ -34,12 +35,12 @@ const INPUTS: CalcInputs = {
 };
 
 /** A cost-plus version with `tiers` offerings, each carrying one $1/user tool. */
-function configFor(tiers: ServiceTierDef[]): PricingConfig {
-  const items: CogsLine[] = tiers.map((tier, index) => ({
+function configFor(tiers: ServiceTierDef[], items?: CogsLine[]): PricingConfig {
+  const defaultItems: CogsLine[] = tiers.map((tier, index) => ({
     key: `tool-${tier.key}`,
     label: `Tool ${tier.label}`,
     unit: "USER",
-    tierKey: tier.key,
+    tierKeys: [tier.key],
     unitCost: 1,
     sortOrder: index,
   }));
@@ -50,13 +51,19 @@ function configFor(tiers: ServiceTierDef[]): PricingConfig {
     model: "COST_PLUS",
     settings: SETTINGS,
     tiers,
-    items,
+    items: items ?? defaultItems,
     bundles: [NO_BUNDLE],
   };
 }
 
+/** Offerings in a chain, each building on the one before it. */
 const ladder = (...labels: string[]): ServiceTierDef[] =>
-  labels.map((label, index) => ({ key: label.toLowerCase(), label, sortOrder: index }));
+  labels.map((label, index) => ({
+    key: label.toLowerCase(),
+    label,
+    sortOrder: index,
+    parentKey: index === 0 ? null : labels[index - 1].toLowerCase(),
+  }));
 
 test("a single offering prices on its own, with no upgrade steps", () => {
   const result = calculate(configFor(ladder("Core")), INPUTS);
@@ -71,7 +78,7 @@ test("a single offering prices on its own, with no upgrade steps", () => {
   assert.equal(core.standardRate, 80);
 });
 
-test("offerings are cumulative: each one carries every offering below it", () => {
+test("an offering carries every offering in its parent chain", () => {
   const result = calculate(configFor(ladder("Core", "Plus", "Elite")), INPUTS);
 
   assert.deepEqual(
@@ -104,11 +111,11 @@ test("offerings are cumulative: each one carries every offering below it", () =>
   assert.deepEqual(includedLines(result, "core").map((line) => line.key), ["tool-core"]);
 });
 
-test("sortOrder decides the ladder, not insertion order", () => {
+test("sortOrder decides display order, not insertion order", () => {
   const config = configFor([
-    { key: "elite", label: "Elite", sortOrder: 2 },
+    { key: "elite", label: "Elite", sortOrder: 2, parentKey: "plus" },
     { key: "core", label: "Core", sortOrder: 0 },
-    { key: "plus", label: "Plus", sortOrder: 1 },
+    { key: "plus", label: "Plus", sortOrder: 1, parentKey: "core" },
   ]);
   assert.deepEqual(
     orderedTiers(config).map((tier) => tier.key),
@@ -155,6 +162,103 @@ test("the upgrade step follows the headline rate, so a shared floor shows no ste
       [0, 40],
       [30, 40],
     ],
+  );
+});
+
+test("a standalone offering carries only its own items, whatever its position", () => {
+  const config = configFor([
+    { key: "core", label: "Core", sortOrder: 0 },
+    { key: "plus", label: "Plus", sortOrder: 1, parentKey: "core" },
+    // Sits above both, but builds on neither.
+    { key: "keystone", label: "Co-Managed Keystone", sortOrder: 2 },
+  ]);
+  const result = calculate(config, INPUTS);
+
+  assert.deepEqual(includedLines(result, "keystone").map((line) => line.key), ["tool-keystone"]);
+  // Priced as a base offering: $10 of tools, not $30, and no upgrade step into it.
+  assert.deepEqual(
+    result.tiers.map((tier) => [tier.key, tier.toolCost, tier.standardRate]),
+    [
+      ["core", 10, 80],
+      ["plus", 20, 120],
+      ["keystone", 10, 80],
+    ],
+  );
+  assert.deepEqual(
+    result.deltas.map((delta) => [delta.fromKey, delta.toKey]),
+    [["core", "plus"]],
+  );
+});
+
+test("an offering inherits through the whole chain, not just its parent", () => {
+  const config = configFor([
+    { key: "core", label: "Core", sortOrder: 0 },
+    { key: "plus", label: "Plus", sortOrder: 1, parentKey: "core" },
+    // Skips a rung in display order but still builds on Plus.
+    { key: "keystone", label: "Keystone", sortOrder: 2, parentKey: "plus" },
+  ]);
+  const result = calculate(config, INPUTS);
+
+  assert.deepEqual(
+    tierChain(config.tiers, "keystone").map((tier) => tier.key),
+    ["core", "plus", "keystone"],
+  );
+  assert.equal(tierResultFor(result, "keystone").toolCost, 30);
+});
+
+test("a tool shared by a parent and its child is only paid for once", () => {
+  const config = configFor(ladder("Core", "Plus"), [
+    { key: "rmm", label: "RMM", unit: "USER", tierKeys: ["core", "plus"], unitCost: 1, sortOrder: 0 },
+    { key: "edr", label: "EDR", unit: "USER", tierKeys: ["plus"], unitCost: 1, sortOrder: 1 },
+  ]);
+  const result = calculate(config, INPUTS);
+
+  assert.deepEqual(includedLines(result, "plus").map((line) => line.key), ["rmm", "edr"]);
+  assert.deepEqual(
+    result.tiers.map((tier) => [tier.key, tier.toolCost, tier.standardRate]),
+    [
+      ["core", 10, 80],
+      // The shared tool stays in the base, so only EDR is priced as an add-on.
+      ["plus", 20, 120],
+    ],
+  );
+});
+
+test("one tool can serve two unrelated offerings without doubling its cost", () => {
+  const config = configFor(
+    [
+      { key: "core", label: "Core", sortOrder: 0 },
+      { key: "keystone", label: "Keystone", sortOrder: 1 },
+    ],
+    [
+      { key: "rmm", label: "RMM", unit: "USER", tierKeys: ["core", "keystone"], unitCost: 1, sortOrder: 0 },
+    ],
+  );
+  const result = calculate(config, INPUTS);
+
+  assert.deepEqual(
+    result.tiers.map((tier) => [tier.key, tier.toolCost]),
+    [
+      ["core", 10],
+      ["keystone", 10],
+    ],
+  );
+});
+
+test("a loop in the parent links still prices, rather than hanging", () => {
+  const config = configFor([
+    { key: "core", label: "Core", sortOrder: 0, parentKey: "plus" },
+    { key: "plus", label: "Plus", sortOrder: 1, parentKey: "core" },
+  ]);
+
+  assert.deepEqual(
+    tierChain(config.tiers, "plus").map((tier) => tier.key),
+    ["core", "plus"],
+  );
+  const result = calculate(config, INPUTS);
+  assert.deepEqual(
+    result.tiers.map((tier) => tier.toolCost),
+    [20, 20],
   );
 });
 

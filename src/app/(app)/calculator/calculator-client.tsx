@@ -6,6 +6,7 @@ import {
   achievedSgmPct,
   includedLines,
   money,
+  tierChain,
   moneyRounded,
   tierResultFor,
   type CalcInputs,
@@ -45,7 +46,8 @@ export function CalculatorClient({
 
   const selected = tierResultFor(result, tierKey);
   const actualSgmPct = achievedSgmPct(selected);
-  const baseKey = result.tiers[0]?.key;
+  // The root of the selected offering's chain: everything above it is an add-on.
+  const baseKey = tierChain(result.tiers, selected.key)[0]?.key;
 
   async function runExport(docType: "QUOTE" | "COGS") {
     setExportError(null);

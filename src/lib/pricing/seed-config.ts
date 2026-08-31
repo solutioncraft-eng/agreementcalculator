@@ -21,7 +21,11 @@ export function seedConfig(): PricingConfig {
     model: "COST_PLUS",
     settings: SEED_COST_PLUS_SETTINGS,
     tiers: SEED_SERVICE_TIERS.map((tier, index) => ({ ...tier, sortOrder: index })),
-    items: SEED_COGS_ITEMS.map((item, index) => ({ ...item, sortOrder: index })),
+    items: SEED_COGS_ITEMS.map((item, index) => ({
+      ...item,
+      tierKeys: [...item.tierKeys],
+      sortOrder: index,
+    })),
     bundles: [NO_BUNDLE, ...SEED_BUNDLES.map((bundle, index) => ({ ...bundle, sortOrder: index + 1 }))],
   };
 }

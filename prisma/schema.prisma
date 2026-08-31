@@ -140,6 +140,7 @@ model Tenant {
   pricingVersions PricingVersion[]
   serviceTiers    ServiceTier[]
   cogsItems       CogsItem[]
+  cogsItemTiers   CogsItemTier[]
   bundles         BundleDiscount[]
   quoteRequests   QuoteRequest[]
   reviews         QuoteReview[]
@@ -244,12 +245,13 @@ model PricingVersion {
   @@index([tenantId, status])
 }
 
-/// A service level a workspace sells, e.g. "Advantage" then "Pinnacle". Tiers
-/// are ordered and cumulative: a quote for the third tier includes the COGS
-/// items of the first two, and each tier above the first is priced with the
-/// add-on multiplier. They belong to a pricing version rather than the tenant
-/// so publishing freezes the offering set along with the numbers, and a
-/// historical quote keeps reproducing the tiers it was priced against.
+/// A service level a workspace sells, e.g. "Advantage" then "Pinnacle". An
+/// offering may build on another through `parentKey`, in which case it includes
+/// its parent chain's COGS items on top of its own and its extra items are
+/// priced with the add-on multiplier. They belong to a pricing version rather
+/// than the tenant so publishing freezes the offering set along with the
+/// numbers, and a historical quote keeps reproducing the tiers it was priced
+/// against.
 model ServiceTier {
   id        String         @id @default(cuid())
   tenantId  String
@@ -257,14 +259,20 @@ model ServiceTier {
   versionId String
   version   PricingVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
 
-  /// Stable machine key, unique within a version; referenced by CogsItem.tierKey.
+  /// Stable machine key, unique within a version; referenced by CogsItemTier.
   key String
   /// Tenant-facing name, e.g. "Advantage".
   label String
   /// One line describing what the tier is, shown on the calculator card.
   description String?
-  /// Position in the ladder. The lowest is the base tier everything builds on.
+  /// Position in the ladder, used for display order only.
   sortOrder Int @default(0)
+
+  /// `key` of the offering this one builds on, within the same version. The
+  /// offering then includes every COGS item of its parent chain on top of its
+  /// own. Null means standalone: it carries only the items assigned to it, and
+  /// it is priced as a base offering rather than as a step up from another.
+  parentKey String?
 
   @@unique([versionId, key])
   @@index([versionId])
@@ -286,16 +294,35 @@ model CogsItem {
   label     String
   vendor    String?
   unit      Unit
-  /// ServiceTier.key within the same version this item belongs to.
-  tierKey   String
   unitCost  Decimal @db.Decimal(10, 4)
   /// Sell price per unit, used by rate-card style models. Null for cost-plus.
   unitPrice Decimal? @db.Decimal(10, 4)
   active    Boolean @default(true)
   sortOrder Int     @default(0)
 
+  tiers CogsItemTier[]
+
   @@unique([versionId, key])
   @@index([versionId])
+  @@index([tenantId])
+}
+
+/// Which offerings a COGS item is part of. An item may be assigned to several
+/// offerings, so two standalone offerings can both include the same tool without
+/// duplicating its cost row; an offering with a parent inherits the chain's
+/// items and only needs rows for what it adds.
+model CogsItemTier {
+  id       String   @id @default(cuid())
+  tenantId String
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  itemId   String
+  item     CogsItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  /// ServiceTier.key within the item's version.
+  tierKey String
+
+  @@unique([itemId, tierKey])
+  @@index([tierKey])
   @@index([tenantId])
 }
 

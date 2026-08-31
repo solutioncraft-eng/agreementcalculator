@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import clsx from "clsx";
 import { money } from "@/lib/pricing/engine";
+import { DEFAULT_INPUTS } from "@/lib/pricing/defaults";
 import {
   deleteBundle,
   deleteCogsItem,
@@ -48,6 +49,7 @@ interface TierView {
   key: string;
   label: string;
   description: string | null;
+  parentKey: string | null;
 }
 
 interface ItemView {
@@ -55,10 +57,82 @@ interface ItemView {
   label: string;
   vendor: string | null;
   unit: string;
-  tierKey: string;
+  tierKeys: string[];
   unitCost: number;
   active: boolean;
   sortOrder: number;
+}
+
+/**
+ * Quantities the cost readout multiplies by. The editor has no client in front
+ * of it, so a fixed reference shape is the only way to state a cost in dollars;
+ * the panel says which numbers it used.
+ */
+const REFERENCE = DEFAULT_INPUTS;
+
+function quantityFor(unit: string): number {
+  if (unit === "USER") return REFERENCE.users;
+  if (unit === "DEVICE") return REFERENCE.devices;
+  if (unit === "LOCATION") return REFERENCE.locations;
+  return 1;
+}
+
+/** An offering's parent chain, root first, stopping at a missing parent or a loop. */
+function chainOf(tiers: TierView[], key: string): TierView[] {
+  const chain: TierView[] = [];
+  const seen = new Set<string>();
+  let current = tiers.find((tier) => tier.key === key);
+  while (current && !seen.has(current.key)) {
+    seen.add(current.key);
+    chain.unshift(current);
+    current = current.parentKey ? tiers.find((tier) => tier.key === current!.parentKey) : undefined;
+  }
+  return chain;
+}
+
+/** Offerings that would build on `key` through their parents, plus `key` itself. */
+function descendantsOf(tiers: TierView[], key: string): Set<string> {
+  const blocked = new Set([key]);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const tier of tiers) {
+      if (!blocked.has(tier.key) && tier.parentKey && blocked.has(tier.parentKey)) {
+        blocked.add(tier.key);
+        grew = true;
+      }
+    }
+  }
+  return blocked;
+}
+
+interface TierCosting {
+  /** Items assigned to the offering itself. */
+  own: ItemView[];
+  /** Items it only gets through its parent chain. */
+  inherited: ItemView[];
+  ownCost: number;
+  totalCost: number;
+}
+
+/** What each offering costs at the reference quantities, own items and inherited. */
+function costings(tiers: TierView[], items: ItemView[]): Map<string, TierCosting> {
+  const active = items.filter((item) => item.active);
+  return new Map(
+    tiers.map((tier) => {
+      const own = active.filter((item) => item.tierKeys.includes(tier.key));
+      const chain = chainOf(tiers, tier.key).filter((member) => member.key !== tier.key);
+      const inherited = active.filter(
+        (item) =>
+          !item.tierKeys.includes(tier.key) &&
+          chain.some((member) => item.tierKeys.includes(member.key)),
+      );
+      const cost = (rows: ItemView[]) =>
+        rows.reduce((sum, item) => sum + item.unitCost * quantityFor(item.unit), 0);
+      const ownCost = cost(own);
+      return [tier.key, { own, inherited, ownCost, totalCost: ownCost + cost(inherited) }];
+    }),
+  );
 }
 
 interface BundleView {
@@ -109,6 +183,7 @@ export function VersionEditor({
   const [editing, setEditing] = useState<string | null>(null);
   const [editingTier, setEditingTier] = useState<string | null>(null);
   const tierLabel = (key: string) => tiers.find((tier) => tier.key === key)?.label ?? key;
+  const costing = costings(tiers, items);
 
   return (
     <div className="space-y-6">
@@ -183,9 +258,10 @@ export function VersionEditor({
       <section className="card">
         <h2 className="text-[18px]">Offerings</h2>
         <p className="mt-1 text-[14px] text-slate">
-          What this workspace sells, cheapest first. Offerings are cumulative: each one includes the COGS
-          items of every offering below it, and each step up is priced with the add-on multiplier. Publishing
-          freezes this list, so quotes and PDFs keep reproducing the offerings they were priced against.
+          What this workspace sells. An offering either stands alone or builds on another: it then includes
+          every COGS item of the offering it builds on, and what it adds is priced with the add-on multiplier.
+          Publishing freezes this list, so quotes and PDFs keep reproducing the offerings they were priced
+          against.
         </p>
 
         <ol className="mt-4 space-y-2">
@@ -198,6 +274,7 @@ export function VersionEditor({
                 <TierForm
                   action={tierAction}
                   versionId={version.id}
+                  tiers={tiers}
                   tier={tier}
                   pending={savingTier}
                   onDone={() => setEditingTier(null)}
@@ -207,12 +284,23 @@ export function VersionEditor({
                   <div>
                     <p className="font-semibold text-navy">
                       <span className="mr-2 font-display text-[11px] uppercase tracking-eyebrow text-slate">
-                        {index === 0 ? "Base" : `Step ${index}`}
+                        {tier.parentKey ? `Builds on ${tierLabel(tier.parentKey)}` : "Standalone"}
                       </span>
                       {tier.label}
                     </p>
                     <p className="text-[13px] text-slate">{tier.description ?? "—"}</p>
                     <p className="font-mono text-[11px] text-slate">{tier.key}</p>
+                    <p className="mt-1 font-mono text-[11px] text-slate">
+                      {costing.get(tier.key)?.own.length ?? 0} own ·{" "}
+                      {costing.get(tier.key)?.inherited.length ?? 0} inherited ·{" "}
+                      {money(costing.get(tier.key)?.totalCost ?? 0)}/mo cost
+                    </p>
+                    {editable && (costing.get(tier.key)?.own.length ?? 0) === 0 ? (
+                      <p className="mt-1 text-[12px] text-orange-dark">
+                        No COGS items of its own — it sells{" "}
+                        {tier.parentKey ? `${tierLabel(tier.parentKey)}'s stack` : "nothing"} at this price.
+                      </p>
+                    ) : null}
                   </div>
                   {editable ? (
                     <div className="flex flex-wrap items-center gap-1">
@@ -239,7 +327,7 @@ export function VersionEditor({
                         className="btn-ghost btn-sm"
                         onClick={() => setEditingTier(tier.id)}
                       >
-                        Rename
+                        Edit
                       </button>
                       <form action={tierDeleteAction}>
                         <input type="hidden" name="versionId" value={version.id} />
@@ -271,7 +359,47 @@ export function VersionEditor({
         {editable ? (
           <div className="mt-6 border-t border-mist pt-5">
             <h3 className="label">Add an offering</h3>
-            <TierForm action={tierAction} versionId={version.id} pending={savingTier} />
+            <TierForm action={tierAction} versionId={version.id} tiers={tiers} pending={savingTier} />
+          </div>
+        ) : null}
+
+        {tiers.length > 0 ? (
+          <div className="mt-6 border-t border-mist pt-5">
+            <h3 className="label">Cost per offering</h3>
+            <p className="mt-1 text-[13px] text-slate">
+              At {REFERENCE.users} users, {REFERENCE.devices} devices and {REFERENCE.locations} locations, so
+              the numbers are comparable rather than a quote. Inherited items come from the offering this one
+              builds on.
+            </p>
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full min-w-[420px] text-[14px]">
+                <thead>
+                  <tr className="border-b border-navy text-left font-display text-[11px] uppercase tracking-eyebrow text-slate">
+                    <th className="py-2">Offering</th>
+                    <th className="py-2 text-right">Own items</th>
+                    <th className="py-2 text-right">Own cost</th>
+                    <th className="py-2 text-right">Included cost</th>
+                    <th className="py-2 text-right">Per user</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tiers.map((tier) => {
+                    const row = costing.get(tier.key);
+                    return (
+                      <tr key={tier.id} className="border-b border-steel last:border-0">
+                        <td className="py-2 font-medium text-navy">{tier.label}</td>
+                        <td className="py-2 text-right">{row?.own.length ?? 0}</td>
+                        <td className="py-2 text-right">{money(row?.ownCost ?? 0)}</td>
+                        <td className="py-2 text-right font-medium">{money(row?.totalCost ?? 0)}</td>
+                        <td className="py-2 text-right text-slate">
+                          {money((row?.totalCost ?? 0) / REFERENCE.users)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         ) : null}
       </section>
@@ -279,18 +407,22 @@ export function VersionEditor({
       <section className="card">
         <h2 className="text-[18px]">COGS items</h2>
         <p className="mt-1 text-[14px] text-slate">
-          Each item is billed to you on a unit basis. The basis decides what it multiplies by: user count,
-          device count, location count, or once per agreement.
+          Each item is billed to you on a unit basis, and belongs to one or more offerings. A filled square is
+          an item the offering carries itself; a hollow one is inherited from the offering it builds on.
         </p>
 
         <div className="mt-4 overflow-x-auto">
-          <table className="w-full text-[14px]">
+          <table className="w-full min-w-[640px] text-[14px]">
             <thead>
               <tr className="border-b border-navy text-left font-display text-[11px] uppercase tracking-eyebrow text-slate">
                 <th className="py-3">Item</th>
                 <th className="py-3">Vendor</th>
                 <th className="py-3">Basis</th>
-                <th className="py-3">Offering</th>
+                {tiers.map((tier) => (
+                  <th key={tier.key} className="py-3 text-center">
+                    {tier.label}
+                  </th>
+                ))}
                 <th className="py-3 text-right">Unit cost</th>
                 <th className="py-3">Active</th>
                 {editable ? <th className="py-3" /> : null}
@@ -300,7 +432,7 @@ export function VersionEditor({
               {items.map((item) =>
                 editing === item.id ? (
                   <tr key={item.id} className="border-b border-steel bg-paper">
-                    <td colSpan={editable ? 7 : 6} className="py-4">
+                    <td colSpan={(editable ? 6 : 5) + tiers.length} className="py-4">
                       <ItemForm
                         action={itemAction}
                         versionId={version.id}
@@ -316,16 +448,27 @@ export function VersionEditor({
                     <td className="py-3 font-medium text-navy">{item.label}</td>
                     <td className="py-3 text-slate">{item.vendor ?? "—"}</td>
                     <td className="py-3">{UNITS.find((u) => u.value === item.unit)?.label ?? item.unit}</td>
-                    <td className="py-3">
-                      <span
-                        className={clsx(
-                          "rounded-brand px-2 py-1 font-display text-[10px] font-bold uppercase tracking-eyebrow",
-                          item.tierKey === tiers[0]?.key ? "bg-navy text-white" : "bg-orange text-orange-contrast",
-                        )}
-                      >
-                        {tierLabel(item.tierKey)}
-                      </span>
-                    </td>
+                    {tiers.map((tier) => {
+                      const own = item.tierKeys.includes(tier.key);
+                      const inherited = !own && (costing.get(tier.key)?.inherited.includes(item) ?? false);
+                      return (
+                        <td key={tier.key} className="py-3 text-center">
+                          <span
+                            aria-label={`${item.label} in ${tier.label}: ${
+                              own ? "own item" : inherited ? "inherited" : "not included"
+                            }`}
+                            className={clsx(
+                              "inline-block h-3 w-3 rounded-[2px]",
+                              own
+                                ? "bg-navy"
+                                : inherited
+                                  ? "border border-orange bg-transparent"
+                                  : "border border-mist bg-transparent",
+                            )}
+                          />
+                        </td>
+                      );
+                    })}
                     <td className="py-3 text-right">{money(item.unitCost)}</td>
                     <td className="py-3 text-slate">{item.active ? "Yes" : "No"}</td>
                     {editable ? (
@@ -354,6 +497,10 @@ export function VersionEditor({
         {editable ? (
           <div className="mt-6 border-t border-mist pt-5">
             <h3 className="label">Add an item</h3>
+            <p className="mt-1 text-[13px] text-slate">
+              Pick every offering that carries it. An offering that builds on another does not need the parent&apos;s
+              items ticked again.
+            </p>
             <ItemForm action={itemAction} versionId={version.id} tiers={tiers} pending={savingItem} />
           </div>
         ) : null}
@@ -416,18 +563,24 @@ export function VersionEditor({
 function TierForm({
   action,
   versionId,
+  tiers,
   tier,
   pending,
   onDone,
 }: {
   action: (formData: FormData) => void;
   versionId: string;
+  tiers: TierView[];
   tier?: TierView;
   pending: boolean;
   onDone?: () => void;
 }) {
+  // An offering cannot build on itself or on anything that builds on it.
+  const blocked = tier ? descendantsOf(tiers, tier.key) : new Set<string>();
+  const candidates = tiers.filter((candidate) => !blocked.has(candidate.key));
+
   return (
-    <form action={action} className="grid gap-3 md:grid-cols-3 md:items-end">
+    <form action={action} className="grid gap-3 md:grid-cols-4 md:items-end">
       <input type="hidden" name="versionId" value={versionId} />
       {tier ? <input type="hidden" name="tierId" value={tier.id} /> : null}
       <Field name="label" label="Offering name" defaultValue={tier?.label} placeholder="Pinnacle" />
@@ -437,6 +590,24 @@ function TierForm({
         defaultValue={tier?.description ?? ""}
         placeholder="Adds the security stack"
       />
+      <div>
+        <label className="label" htmlFor={`parent-${tier?.id ?? "new"}`}>
+          Builds on
+        </label>
+        <select
+          id={`parent-${tier?.id ?? "new"}`}
+          name="parentKey"
+          defaultValue={tier ? (tier.parentKey ?? "") : (candidates.at(-1)?.key ?? "")}
+          className="field mt-1"
+        >
+          <option value="">Nothing — standalone offering</option>
+          {candidates.map((candidate) => (
+            <option key={candidate.key} value={candidate.key}>
+              {candidate.label}
+            </option>
+          ))}
+        </select>
+      </div>
       <div className="flex gap-2">
         <button type="submit" className="btn-navy" disabled={pending}>
           {pending ? "Saving…" : tier ? "Save offering" : "Add offering"}
@@ -491,22 +662,22 @@ function ItemForm({
           ))}
         </select>
       </div>
-      <div>
-        <label className="label" htmlFor={`tier-${item?.id ?? "new"}`}>
-          Offering
-        </label>
-        <select
-          id={`tier-${item?.id ?? "new"}`}
-          name="tierKey"
-          defaultValue={item?.tierKey ?? tiers[0]?.key ?? ""}
-          className="field mt-1"
-        >
+      <div className="md:col-span-2">
+        <span className="label">Offerings</span>
+        <div className="mt-1 flex flex-wrap gap-x-4 gap-y-2">
           {tiers.map((tier, index) => (
-            <option key={tier.key} value={tier.key}>
-              {index === 0 ? tier.label : `${tier.label} add-on`}
-            </option>
+            <label key={tier.key} className="flex items-center gap-2 text-[13px]">
+              <input
+                type="checkbox"
+                name="tierKeys"
+                value={tier.key}
+                defaultChecked={item ? item.tierKeys.includes(tier.key) : index === 0}
+                className="h-4 w-4 accent-orange"
+              />
+              {tier.label}
+            </label>
           ))}
-        </select>
+        </div>
       </div>
       <Field
         name="unitCost"

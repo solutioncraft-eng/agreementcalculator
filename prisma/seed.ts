@@ -79,6 +79,7 @@ async function main() {
           key: tier.key,
           label: tier.label,
           description: tier.description,
+          parentKey: tier.parentKey,
           sortOrder: index,
         })),
       },
@@ -89,7 +90,9 @@ async function main() {
           label: item.label,
           vendor: item.vendor,
           unit: item.unit,
-          tierKey: item.tierKey,
+          tiers: {
+            create: item.tierKeys.map((tierKey) => ({ tenantId: tenant.id, tierKey })),
+          },
           unitCost: item.unitCost,
           sortOrder: index * 10,
         })),
