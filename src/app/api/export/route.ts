@@ -7,6 +7,7 @@ import { getActiveConfig, getConfigForVersion } from "@/lib/pricing/config";
 import {
   approvalLabel,
   buildDocument,
+  type ApprovalRecord,
   type ApprovalState,
   type DocWorkspace,
   type StampInfo,
@@ -53,9 +54,20 @@ export async function POST(request: Request) {
   let quoteRef: string | null = null;
   let clientName = payload.clientName;
   let notes = payload.notes || null;
+  let approval: ApprovalRecord | null = null;
 
   if (quoteId) {
-    const quote = await db.quoteRequest.findUnique({ where: { id: quoteId } });
+    const quote = await db.quoteRequest.findUnique({
+      where: { id: quoteId },
+      include: {
+        reviews: {
+          where: { action: "APPROVED" },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          include: { actor: { select: { name: true } } },
+        },
+      },
+    });
     if (!quote) return NextResponse.json({ error: "Quote not found" }, { status: 404 });
     if (quote.submittedById !== user.id && role === "AM") {
       return NextResponse.json({ error: "Not your quote" }, { status: 403 });
@@ -90,6 +102,18 @@ export async function POST(request: Request) {
     quoteRef = quote.ref;
     clientName = quote.clientName;
     notes = quote.notes;
+    const decision = quote.reviews[0];
+    if (decision) {
+      const decider = await db.membership.findFirst({
+        where: { userId: decision.actorId },
+        select: { role: true },
+      });
+      approval = {
+        by: decision.actor.name,
+        role: decider?.role ?? "LEADER",
+        at: decision.createdAt,
+      };
+    }
   } else {
     if (!payload.inputs) return NextResponse.json({ error: "Missing calculator inputs" }, { status: 400 });
     inputs = payload.inputs;
@@ -136,6 +160,8 @@ export async function POST(request: Request) {
     costBasis: config.costBasis,
     approvalState,
     quoteRef,
+    approval,
+    timeZone: payload.timeZone ?? null,
   };
 
   const workspace: DocWorkspace = {
