@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth";
+import type { TenantDb } from "@/lib/db";
 import {
   bundleSchema,
   cogsItemSchema,
@@ -355,6 +356,47 @@ export async function setTierItems(_prev: AdminState, formData: FormData): Promi
   const tier = await db.serviceTier.findFirst({ where: { versionId, key: tierKey } });
   if (!tier) return { error: "That offering is not part of this draft." };
 
+  const change = await setOwnItems(db, tenant.id, versionId, tierKey, chosen);
+  if ("error" in change) return change;
+  if (!change.changed) return { ok: `${tier.label} already carries exactly those items.` };
+
+  await audit({
+    action: "SERVICE_TIER_UPDATED",
+    entity: "ServiceTier",
+    entityId: tier.key,
+    summary: `Offering "${tier.label}" now carries ${chosen.size} COGS item${
+      chosen.size === 1 ? "" : "s"
+    } of its own on draft ${version.label}`,
+    before: { ownItems: change.before },
+    after: { ownItems: change.after },
+    tenantId: tenant.id,
+    actor: user,
+  });
+
+  revalidatePath(`/admin/pricing/${versionId}`);
+  return {
+    ok: `${tier.label} carries ${chosen.size} item${chosen.size === 1 ? "" : "s"} of its own.`,
+  };
+}
+
+interface OwnItemsChange {
+  before: string[];
+  after: string[];
+  changed: boolean;
+}
+
+/**
+ * Makes `tierKey` carry exactly `chosen` and nothing else, leaving every other
+ * offering's memberships untouched. Reports the item keys either side of the
+ * change so callers can audit it.
+ */
+async function setOwnItems(
+  db: TenantDb,
+  tenantId: string,
+  versionId: string,
+  tierKey: string,
+  chosen: Set<string>,
+): Promise<OwnItemsChange | { error: string }> {
   const items = await db.cogsItem.findMany({ where: { versionId }, include: { tiers: true } });
   if ([...chosen].some((id) => !items.some((item) => item.id === id))) {
     return { error: "Choose COGS items that are part of this draft." };
@@ -364,36 +406,20 @@ export async function setTierItems(_prev: AdminState, formData: FormData): Promi
     item.tiers.some((membership) => membership.tierKey === tierKey);
   const added = items.filter((item) => chosen.has(item.id) && !carries(item));
   const removed = items.filter((item) => !chosen.has(item.id) && carries(item));
-  if (added.length === 0 && removed.length === 0) {
-    return { ok: `${tier.label} already carries exactly those items.` };
-  }
+  const change: OwnItemsChange = {
+    before: items.filter(carries).map((item) => item.key),
+    after: items.filter((item) => chosen.has(item.id)).map((item) => item.key),
+    changed: added.length > 0 || removed.length > 0,
+  };
+  if (!change.changed) return change;
 
   await db.$transaction([
     ...(removed.length > 0
       ? [db.cogsItemTier.deleteMany({ where: { tierKey, itemId: { in: removed.map((item) => item.id) } } })]
       : []),
-    ...added.map((item) =>
-      db.cogsItemTier.create({ data: { tenantId: tenant.id, itemId: item.id, tierKey } }),
-    ),
+    ...added.map((item) => db.cogsItemTier.create({ data: { tenantId, itemId: item.id, tierKey } })),
   ]);
-
-  await audit({
-    action: "SERVICE_TIER_UPDATED",
-    entity: "ServiceTier",
-    entityId: tier.key,
-    summary: `Offering "${tier.label}" now carries ${chosen.size} COGS item${
-      chosen.size === 1 ? "" : "s"
-    } of its own on draft ${version.label}`,
-    before: { ownItems: items.filter(carries).map((item) => item.key) },
-    after: { ownItems: items.filter((item) => chosen.has(item.id)).map((item) => item.key) },
-    tenantId: tenant.id,
-    actor: user,
-  });
-
-  revalidatePath(`/admin/pricing/${versionId}`);
-  return {
-    ok: `${tier.label} carries ${chosen.size} item${chosen.size === 1 ? "" : "s"} of its own.`,
-  };
+  return change;
 }
 
 /**
@@ -435,6 +461,11 @@ export async function saveServiceTier(_prev: AdminState, formData: FormData): Pr
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the offering." };
   const data = parsed.data;
   const parentKey = data.parentKey || null;
+  // The form only submits memberships when it showed the item checklist, so an
+  // ordinary rename never clears the offering's stack.
+  const chosenItems = formData.has("chooseItems")
+    ? new Set(formData.getAll("itemIds").map(String).filter(Boolean))
+    : null;
 
   const tiers = await db.serviceTier.findMany({ where: { versionId }, orderBy: { sortOrder: "asc" } });
 
@@ -457,18 +488,33 @@ export async function saveServiceTier(_prev: AdminState, formData: FormData): Pr
       where: { id: tierId },
       data: { label: data.label, description: data.description || null, parentKey },
     });
+    const change = chosenItems
+      ? await setOwnItems(db, tenant.id, versionId, before.key, chosenItems)
+      : null;
+    if (change && "error" in change) return change;
     await audit({
       action: "SERVICE_TIER_UPDATED",
       entity: "ServiceTier",
       entityId: before.key,
       summary: `Offering "${before.label}" updated to "${data.label}" on draft ${version.label}`,
-      before: { label: before.label, description: before.description, parentKey: before.parentKey },
-      after: { ...data, parentKey },
+      before: {
+        label: before.label,
+        description: before.description,
+        parentKey: before.parentKey,
+        ...(change ? { ownItems: change.before } : {}),
+      },
+      after: { ...data, parentKey, ...(change ? { ownItems: change.after } : {}) },
       tenantId: tenant.id,
       actor: user,
     });
     revalidatePath(`/admin/pricing/${versionId}`);
-    return { ok: "Offering updated." };
+    return {
+      ok: change
+        ? `Offering updated — ${data.label} carries ${change.after.length} item${
+            change.after.length === 1 ? "" : "s"
+          } of its own.`
+        : "Offering updated.",
+    };
   }
 
   if (tiers.length >= 8) return { error: "Eight offerings is the most a version can hold." };
@@ -487,6 +533,8 @@ export async function saveServiceTier(_prev: AdminState, formData: FormData): Pr
       sortOrder: (tiers.at(-1)?.sortOrder ?? -1) + 1,
     },
   });
+  const change = chosenItems ? await setOwnItems(db, tenant.id, versionId, key, chosenItems) : null;
+  if (change && "error" in change) return change;
   await audit({
     action: "SERVICE_TIER_CREATED",
     entity: "ServiceTier",
@@ -494,13 +542,19 @@ export async function saveServiceTier(_prev: AdminState, formData: FormData): Pr
     summary: `Offering "${data.label}" added to draft ${version.label}${
       parentKey ? `, building on ${tiers.find((tier) => tier.key === parentKey)?.label}` : " as a standalone offering"
     }`,
-    after: { ...data, key, parentKey },
+    after: { ...data, key, parentKey, ...(change ? { ownItems: change.after } : {}) },
     tenantId: tenant.id,
     actor: user,
   });
 
   revalidatePath(`/admin/pricing/${versionId}`);
-  return { ok: `Added ${data.label}.` };
+  return {
+    ok: change
+      ? `Added ${data.label} carrying ${change.after.length} item${
+          change.after.length === 1 ? "" : "s"
+        } of its own.`
+      : `Added ${data.label}.`,
+  };
 }
 
 /** Moves an offering one step up or down the display order. */

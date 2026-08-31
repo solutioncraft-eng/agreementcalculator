@@ -283,7 +283,10 @@ export function VersionEditor({
                   versionId={version.id}
                   tiers={tiers}
                   tier={tier}
+                  items={items}
                   pending={savingTier}
+                  itemAction={itemAction}
+                  savingItem={savingItem}
                   onDone={() => setEditingTier(null)}
                 />
               ) : (
@@ -385,7 +388,15 @@ export function VersionEditor({
         {editable ? (
           <div className="mt-6 border-t border-mist pt-5">
             <h3 className="label">Add an offering</h3>
-            <TierForm action={tierAction} versionId={version.id} tiers={tiers} pending={savingTier} />
+            <TierForm
+              action={tierAction}
+              versionId={version.id}
+              tiers={tiers}
+              items={items}
+              pending={savingTier}
+              itemAction={itemAction}
+              savingItem={savingItem}
+            />
           </div>
         ) : null}
 
@@ -715,60 +726,140 @@ function TierForm({
   versionId,
   tiers,
   tier,
+  items,
   pending,
+  itemAction,
+  savingItem,
   onDone,
 }: {
   action: (formData: FormData) => void;
   versionId: string;
   tiers: TierView[];
   tier?: TierView;
+  items: ItemView[];
   pending: boolean;
+  itemAction: (formData: FormData) => void;
+  savingItem: boolean;
   onDone?: () => void;
 }) {
   // An offering cannot build on itself or on anything that builds on it.
   const blocked = tier ? descendantsOf(tiers, tier.key) : new Set<string>();
   const candidates = tiers.filter((candidate) => !blocked.has(candidate.key));
+  const [parentKey, setParentKey] = useState(
+    tier ? (tier.parentKey ?? "") : (candidates.at(-1)?.key ?? ""),
+  );
+  const [addingItem, setAddingItem] = useState(false);
+  const name = tier?.label ?? "this offering";
 
   return (
-    <form action={action} className="grid gap-3 md:grid-cols-4 md:items-end">
-      <input type="hidden" name="versionId" value={versionId} />
-      {tier ? <input type="hidden" name="tierId" value={tier.id} /> : null}
-      <Field name="label" label="Offering name" defaultValue={tier?.label} placeholder="Pinnacle" />
-      <Field
-        name="description"
-        label="One-line description"
-        defaultValue={tier?.description ?? ""}
-        placeholder="Adds the security stack"
-      />
-      <div>
-        <label className="label" htmlFor={`parent-${tier?.id ?? "new"}`}>
-          Builds on
-        </label>
-        <select
-          id={`parent-${tier?.id ?? "new"}`}
-          name="parentKey"
-          defaultValue={tier ? (tier.parentKey ?? "") : (candidates.at(-1)?.key ?? "")}
-          className="field mt-1"
-        >
-          <option value="">Nothing — standalone offering</option>
-          {candidates.map((candidate) => (
-            <option key={candidate.key} value={candidate.key}>
-              {candidate.label}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="flex gap-2">
-        <button type="submit" className="btn-navy" disabled={pending}>
-          {pending ? "Saving…" : tier ? "Save offering" : "Add offering"}
-        </button>
-        {onDone ? (
-          <button type="button" className="btn-ghost" onClick={onDone}>
-            Cancel
+    <>
+      <form action={action} className="grid gap-3 md:grid-cols-4 md:items-end">
+        <input type="hidden" name="versionId" value={versionId} />
+        {tier ? <input type="hidden" name="tierId" value={tier.id} /> : null}
+        <Field name="label" label="Offering name" defaultValue={tier?.label} placeholder="Pinnacle" />
+        <Field
+          name="description"
+          label="One-line description"
+          defaultValue={tier?.description ?? ""}
+          placeholder="Adds the security stack"
+        />
+        <div>
+          <label className="label" htmlFor={`parent-${tier?.id ?? "new"}`}>
+            Builds on
+          </label>
+          <select
+            id={`parent-${tier?.id ?? "new"}`}
+            name="parentKey"
+            value={parentKey}
+            onChange={(event) => setParentKey(event.target.value)}
+            className="field mt-1"
+          >
+            <option value="">Nothing — standalone offering</option>
+            {candidates.map((candidate) => (
+              <option key={candidate.key} value={candidate.key}>
+                {candidate.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex gap-2">
+          <button type="submit" className="btn-navy" disabled={pending}>
+            {pending ? "Saving…" : tier ? "Save offering" : "Add offering"}
           </button>
+          {onDone ? (
+            <button type="button" className="btn-ghost" onClick={onDone}>
+              Cancel
+            </button>
+          ) : null}
+        </div>
+        {parentKey === "" ? (
+          <div className="md:col-span-4 border-t border-mist pt-3">
+            <input type="hidden" name="chooseItems" value="1" />
+            <p className="label">Which COGS items does it carry?</p>
+            <p className="mt-1 text-[13px] text-slate">
+              Standalone means nothing is inherited, so {name} costs what you tick here — saved with the
+              offering.
+            </p>
+            {items.length === 0 ? (
+              <p className="mt-2 text-[13px] text-orange-dark">
+                This draft has no COGS items yet — add the first one below.
+              </p>
+            ) : (
+              <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {items.map((item) => (
+                  <label
+                    key={item.id}
+                    className="flex items-start gap-2 rounded-brand border border-steel px-3 py-2 text-[13px]"
+                  >
+                    <input
+                      type="checkbox"
+                      name="itemIds"
+                      value={item.id}
+                      defaultChecked={tier ? item.tierKeys.includes(tier.key) : false}
+                      className="mt-[3px] h-4 w-4 accent-orange"
+                    />
+                    <span>
+                      {item.label}
+                      <span className="block font-mono text-[11px] text-slate">
+                        {money(item.unitCost)}/{item.unit === "FLAT" ? "mo" : item.unit.toLowerCase()}
+                        {item.active ? "" : " · inactive"}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
+            <button
+              type="button"
+              className="btn-ghost btn-sm mt-3"
+              onClick={() => setAddingItem(!addingItem)}
+            >
+              {addingItem ? "Never mind the new item" : "Need a COGS item that is not listed?"}
+            </button>
+          </div>
         ) : null}
-      </div>
-    </form>
+      </form>
+      {parentKey === "" && addingItem ? (
+        <div className="mt-3 rounded-brand border border-steel bg-paper p-3">
+          <p className="label">New COGS item</p>
+          <p className="mt-1 text-[13px] text-slate">
+            {tier
+              ? `Saved on its own, already carried by ${tier.label}. Your unsaved offering edits above are kept.`
+              : "Saved on its own — tick it above once it appears, then add the offering."}
+          </p>
+          <div className="mt-2">
+            <ItemForm
+              action={itemAction}
+              versionId={versionId}
+              tiers={tiers}
+              presetTierKeys={tier ? [tier.key] : []}
+              pending={savingItem}
+              onDone={() => setAddingItem(false)}
+            />
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -777,6 +868,7 @@ function ItemForm({
   versionId,
   tiers,
   item,
+  presetTierKeys,
   pending,
   onDone,
 }: {
@@ -784,6 +876,7 @@ function ItemForm({
   versionId: string;
   tiers: TierView[];
   item?: ItemView;
+  presetTierKeys?: string[];
   pending: boolean;
   onDone?: () => void;
 }) {
@@ -829,7 +922,13 @@ function ItemForm({
                 type="checkbox"
                 name="tierKeys"
                 value={tier.key}
-                defaultChecked={item ? item.tierKeys.includes(tier.key) : index === 0}
+                defaultChecked={
+                  item
+                    ? item.tierKeys.includes(tier.key)
+                    : presetTierKeys
+                      ? presetTierKeys.includes(tier.key)
+                      : index === 0
+                }
                 className="h-4 w-4 accent-orange"
               />
               {tier.label}
