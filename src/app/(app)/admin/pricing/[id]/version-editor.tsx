@@ -292,8 +292,7 @@ export function VersionEditor({
                     <p className="font-mono text-[11px] text-slate">{tier.key}</p>
                     <p className="mt-1 font-mono text-[11px] text-slate">
                       {costing.get(tier.key)?.own.length ?? 0} own ·{" "}
-                      {costing.get(tier.key)?.inherited.length ?? 0} inherited ·{" "}
-                      {money(costing.get(tier.key)?.totalCost ?? 0)}/mo cost
+                      {costing.get(tier.key)?.inherited.length ?? 0} inherited
                     </p>
                     {editable && (costing.get(tier.key)?.own.length ?? 0) === 0 ? (
                       <p className="mt-1 text-[12px] text-orange-dark">
@@ -363,134 +362,148 @@ export function VersionEditor({
           </div>
         ) : null}
 
-        {tiers.length > 0 ? (
-          <div className="mt-6 border-t border-mist pt-5">
-            <h3 className="label">Cost per offering</h3>
-            <p className="mt-1 text-[13px] text-slate">
-              At {REFERENCE.users} users, {REFERENCE.devices} devices and {REFERENCE.locations} locations, so
-              the numbers are comparable rather than a quote. Inherited items come from the offering this one
-              builds on.
-            </p>
-            <div className="mt-3 overflow-x-auto">
-              <table className="w-full min-w-[420px] text-[14px]">
-                <thead>
-                  <tr className="border-b border-navy text-left font-display text-[11px] uppercase tracking-eyebrow text-slate">
-                    <th className="py-2">Offering</th>
-                    <th className="py-2 text-right">Own items</th>
-                    <th className="py-2 text-right">Own cost</th>
-                    <th className="py-2 text-right">Included cost</th>
-                    <th className="py-2 text-right">Per user</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tiers.map((tier) => {
-                    const row = costing.get(tier.key);
-                    return (
-                      <tr key={tier.id} className="border-b border-steel last:border-0">
-                        <td className="py-2 font-medium text-navy">{tier.label}</td>
-                        <td className="py-2 text-right">{row?.own.length ?? 0}</td>
-                        <td className="py-2 text-right">{money(row?.ownCost ?? 0)}</td>
-                        <td className="py-2 text-right font-medium">{money(row?.totalCost ?? 0)}</td>
-                        <td className="py-2 text-right text-slate">
-                          {money((row?.totalCost ?? 0) / REFERENCE.users)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ) : null}
       </section>
+
+      {tiers.length > 0 ? (
+        <section className="card">
+          <h2 className="text-[18px]">What each offering includes</h2>
+          <p className="mt-1 text-[14px] text-slate">
+            Costs are at {REFERENCE.users} users, {REFERENCE.devices} devices and {REFERENCE.locations}{" "}
+            locations, so offerings are comparable rather than quoted. Inherited items come from the offering
+            this one builds on.
+          </p>
+          <div className="mt-4 grid gap-4 lg:grid-cols-2">
+            {tiers.map((tier) => {
+              const row = costing.get(tier.key);
+              return (
+                <article key={tier.id} className="rounded-brand border border-mist p-4">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <h3 className="font-display text-[16px] font-bold text-navy">{tier.label}</h3>
+                    <p className="font-mono text-[11px] uppercase tracking-eyebrow text-slate">
+                      {tier.parentKey ? `Builds on ${tierLabel(tier.parentKey)}` : "Standalone"}
+                    </p>
+                  </div>
+                  <dl className="mt-3 grid grid-cols-3 gap-2 border-y border-mist py-3 text-[13px]">
+                    {[
+                      { term: "Own cost", value: `${money(row?.ownCost ?? 0)}/mo` },
+                      { term: "Included cost", value: `${money(row?.totalCost ?? 0)}/mo` },
+                      { term: "Per user", value: money((row?.totalCost ?? 0) / REFERENCE.users) },
+                    ].map((stat) => (
+                      <div key={stat.term}>
+                        <dt className="font-display text-[10px] uppercase tracking-eyebrow text-slate">
+                          {stat.term}
+                        </dt>
+                        <dd className="font-mono text-[14px] text-navy">{stat.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                  <ItemChips
+                    heading={`Carries itself (${row?.own.length ?? 0})`}
+                    items={row?.own ?? []}
+                    tone="own"
+                    empty={
+                      editable
+                        ? `No items of its own — it sells ${
+                            tier.parentKey ? `${tierLabel(tier.parentKey)}'s stack` : "nothing"
+                          } at this price.`
+                        : "No items of its own."
+                    }
+                  />
+                  {tier.parentKey ? (
+                    <ItemChips
+                      heading={`Inherited from ${tierLabel(tier.parentKey)} (${row?.inherited.length ?? 0})`}
+                      items={row?.inherited ?? []}
+                      tone="inherited"
+                      empty="Nothing inherited yet."
+                    />
+                  ) : null}
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
 
       <section className="card">
         <h2 className="text-[18px]">COGS items</h2>
         <p className="mt-1 text-[14px] text-slate">
-          Each item is billed to you on a unit basis, and belongs to one or more offerings. A filled square is
-          an item the offering carries itself; a hollow one is inherited from the offering it builds on.
+          Each item is billed to you on a unit basis and is carried by one or more offerings. The offerings
+          listed on a row are the ones that carry it themselves; anything building on them inherits it.
         </p>
 
-        <div className="mt-4 overflow-x-auto">
-          <table className="w-full min-w-[640px] text-[14px]">
-            <thead>
-              <tr className="border-b border-navy text-left font-display text-[11px] uppercase tracking-eyebrow text-slate">
-                <th className="py-3">Item</th>
-                <th className="py-3">Vendor</th>
-                <th className="py-3">Basis</th>
-                {tiers.map((tier) => (
-                  <th key={tier.key} className="py-3 text-center">
-                    {tier.label}
-                  </th>
-                ))}
-                <th className="py-3 text-right">Unit cost</th>
-                <th className="py-3">Active</th>
-                {editable ? <th className="py-3" /> : null}
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((item) =>
-                editing === item.id ? (
-                  <tr key={item.id} className="border-b border-steel bg-paper">
-                    <td colSpan={(editable ? 6 : 5) + tiers.length} className="py-4">
-                      <ItemForm
-                        action={itemAction}
-                        versionId={version.id}
-                        tiers={tiers}
-                        item={item}
-                        pending={savingItem}
-                        onDone={() => setEditing(null)}
-                      />
-                    </td>
-                  </tr>
-                ) : (
-                  <tr key={item.id} className="border-b border-steel last:border-0">
-                    <td className="py-3 font-medium text-navy">{item.label}</td>
-                    <td className="py-3 text-slate">{item.vendor ?? "—"}</td>
-                    <td className="py-3">{UNITS.find((u) => u.value === item.unit)?.label ?? item.unit}</td>
-                    {tiers.map((tier) => {
-                      const own = item.tierKeys.includes(tier.key);
-                      const inherited = !own && (costing.get(tier.key)?.inherited.includes(item) ?? false);
-                      return (
-                        <td key={tier.key} className="py-3 text-center">
-                          <span
-                            aria-label={`${item.label} in ${tier.label}: ${
-                              own ? "own item" : inherited ? "inherited" : "not included"
-                            }`}
-                            className={clsx(
-                              "inline-block h-3 w-3 rounded-[2px]",
-                              own
-                                ? "bg-navy"
-                                : inherited
-                                  ? "border border-orange bg-transparent"
-                                  : "border border-mist bg-transparent",
-                            )}
-                          />
-                        </td>
-                      );
-                    })}
-                    <td className="py-3 text-right">{money(item.unitCost)}</td>
-                    <td className="py-3 text-slate">{item.active ? "Yes" : "No"}</td>
+        <ul className="mt-4 divide-y divide-steel border-t border-navy">
+          {items.map((item) => (
+            <li key={item.id} className="py-3">
+              {editing === item.id ? (
+                <ItemForm
+                  action={itemAction}
+                  versionId={version.id}
+                  tiers={tiers}
+                  item={item}
+                  pending={savingItem}
+                  onDone={() => setEditing(null)}
+                />
+              ) : (
+                <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2">
+                  <div className="min-w-[220px] flex-1">
+                    <p className="font-medium text-navy">
+                      {item.label}
+                      {item.active ? null : (
+                        <span className="ml-2 font-display text-[10px] uppercase tracking-eyebrow text-slate">
+                          Inactive
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-[13px] text-slate">
+                      {item.vendor ?? "No vendor"} ·{" "}
+                      {UNITS.find((u) => u.value === item.unit)?.label ?? item.unit}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {item.tierKeys.length === 0 ? (
+                        <span className="text-[12px] text-orange-dark">No offering carries this item.</span>
+                      ) : (
+                        tiers
+                          .filter((tier) => item.tierKeys.includes(tier.key))
+                          .map((tier) => (
+                            <span key={tier.key} className="chip-own">
+                              {tier.label}
+                            </span>
+                          ))
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <p className="font-mono text-[15px] text-navy">
+                      {money(item.unitCost)}
+                      <span className="text-[11px] text-slate">
+                        /{item.unit === "FLAT" ? "mo" : item.unit.toLowerCase()}
+                      </span>
+                    </p>
                     {editable ? (
-                      <td className="py-3 text-right">
-                        <button type="button" className="btn-ghost btn-sm" onClick={() => setEditing(item.id)}>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          className="btn-ghost btn-sm"
+                          onClick={() => setEditing(item.id)}
+                        >
                           Edit
                         </button>
-                        <form action={deleteAction} className="inline">
+                        <form action={deleteAction}>
                           <input type="hidden" name="versionId" value={version.id} />
                           <input type="hidden" name="itemId" value={item.id} />
                           <button type="submit" className="btn-ghost btn-sm text-orange-dark">
                             Remove
                           </button>
                         </form>
-                      </td>
+                      </div>
                     ) : null}
-                  </tr>
-                ),
+                  </div>
+                </div>
               )}
-            </tbody>
-          </table>
-        </div>
+            </li>
+          ))}
+          {items.length === 0 ? <li className="py-3 text-slate">No COGS items on this version.</li> : null}
+        </ul>
         <Feedback state={itemState} />
         <Feedback state={deleteState} />
 
@@ -556,6 +569,37 @@ export function VersionEditor({
           flags the quote for review when that happens.
         </p>
       </section>
+    </div>
+  );
+}
+
+/** One offering's item list: what it carries itself, or what it inherits. */
+function ItemChips({
+  heading,
+  items,
+  tone,
+  empty,
+}: {
+  heading: string;
+  items: ItemView[];
+  tone: "own" | "inherited";
+  empty: string;
+}) {
+  return (
+    <div className="mt-3">
+      <p className="font-display text-[10px] uppercase tracking-eyebrow text-slate">{heading}</p>
+      {items.length === 0 ? (
+        <p className={clsx("mt-1 text-[12px]", tone === "own" ? "text-orange-dark" : "text-slate")}>{empty}</p>
+      ) : (
+        <div className="mt-1 flex flex-wrap gap-1">
+          {items.map((item) => (
+            <span key={item.id} className={tone === "own" ? "chip-own" : "chip-inherited"}>
+              {item.label}
+              <span className="ml-1 font-mono text-[10px] opacity-70">{money(item.unitCost)}</span>
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -638,12 +682,10 @@ function ItemForm({
   onDone?: () => void;
 }) {
   return (
-    <form action={action} className="grid gap-3 md:grid-cols-7 md:items-end">
+    <form action={action} className="grid gap-3 md:grid-cols-4 md:items-end">
       <input type="hidden" name="versionId" value={versionId} />
       {item ? <input type="hidden" name="itemId" value={item.id} /> : null}
-      <div className="md:col-span-2">
-        <Field name="label" label="Item" defaultValue={item?.label} placeholder="Security Tool" />
-      </div>
+      <Field name="label" label="Item" defaultValue={item?.label} placeholder="Security Tool" />
       <Field name="vendor" label="Vendor" defaultValue={item?.vendor ?? ""} placeholder="Vendor" />
       <div>
         <label className="label" htmlFor={`unit-${item?.id ?? "new"}`}>
@@ -662,11 +704,21 @@ function ItemForm({
           ))}
         </select>
       </div>
-      <div className="md:col-span-2">
-        <span className="label">Offerings</span>
-        <div className="mt-1 flex flex-wrap gap-x-4 gap-y-2">
+      <Field
+        name="unitCost"
+        label="Unit cost $"
+        type="number"
+        step="0.0001"
+        defaultValue={item?.unitCost ?? ""}
+      />
+      <div className="md:col-span-4">
+        <span className="label">Carried by these offerings</span>
+        <div className="mt-1 flex flex-wrap gap-2">
           {tiers.map((tier, index) => (
-            <label key={tier.key} className="flex items-center gap-2 text-[13px]">
+            <label
+              key={tier.key}
+              className="flex items-center gap-2 rounded-brand border border-steel px-3 py-2 text-[13px]"
+            >
               <input
                 type="checkbox"
                 name="tierKeys"
@@ -679,14 +731,7 @@ function ItemForm({
           ))}
         </div>
       </div>
-      <Field
-        name="unitCost"
-        label="Unit cost $"
-        type="number"
-        step="0.0001"
-        defaultValue={item?.unitCost ?? ""}
-      />
-      <div className="flex items-center gap-3">
+      <div className="flex gap-4 md:col-span-4">
         <label className="flex items-center gap-2 text-[13px]">
           <input
             type="checkbox"
@@ -694,10 +739,10 @@ function ItemForm({
             defaultChecked={item?.active ?? true}
             className="h-4 w-4 accent-orange"
           />
-          Active
+          Active — counted in every offering that carries it
         </label>
       </div>
-      <div className="flex gap-2 md:col-span-7">
+      <div className="flex gap-2 md:col-span-4">
         <button type="submit" className="btn-navy" disabled={pending}>
           {pending ? "Saving…" : item ? "Save item" : "Add item"}
         </button>

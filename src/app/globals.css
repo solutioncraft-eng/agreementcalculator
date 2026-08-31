@@ -77,6 +77,20 @@
     @apply font-display text-navy tabular-nums;
   }
 
+  /* Membership chips: solid navy is carried by the offering itself, the outlined
+     orange one is inherited from the offering it builds on. */
+  .chip {
+    @apply inline-flex items-center rounded-brand px-2 py-[2px] text-[12px] leading-5;
+  }
+
+  .chip-own {
+    @apply chip bg-navy text-white;
+  }
+
+  .chip-inherited {
+    @apply chip border border-orange bg-white text-orange-dark;
+  }
+
   /* Horizontally scrollable nav row for narrow screens, without a visible
      scrollbar eating into the 44px touch target. */
   .nav-row {
