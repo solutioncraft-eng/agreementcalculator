@@ -5,7 +5,7 @@ import type { Role } from "@prisma/client";
 import type { SuperState } from "./actions";
 import { operatorResendWelcome, operatorResetPassword } from "./people-actions";
 
-export interface PersonWorkspace {
+export interface PersonTenant {
   name: string;
   slug: string;
   role: Role;
@@ -20,7 +20,7 @@ export interface Person {
   mustReset: boolean;
   lastLogin: string | null;
   createdAt: string;
-  workspaces: PersonWorkspace[];
+  tenants: PersonTenant[];
 }
 
 function PersonRow({ person }: { person: Person }) {
@@ -45,11 +45,11 @@ function PersonRow({ person }: { person: Person }) {
             {person.mustReset ? <span className="tag bg-mist text-navy">MUST RESET</span> : null}
           </p>
           <p className="mt-1 text-[13px] text-slate">
-            {person.workspaces.length > 0
-              ? person.workspaces
-                  .map((w) => `${w.name} · ${w.role}${w.suspended ? " (suspended)" : ""}`)
+            {person.tenants.length > 0
+              ? person.tenants
+                  .map((t) => `${t.name} · ${t.role}${t.suspended ? " (suspended)" : ""}`)
                   .join("  ·  ")
-              : "No workspace — the account exists but has no access anywhere."}
+              : "No tenant — the account exists but has no access anywhere."}
           </p>
           <p className="mt-1 font-mono text-[12px] text-slate">
             created {person.createdAt} · last sign-in {person.lastLogin ?? "never"}
@@ -87,7 +87,7 @@ function PersonRow({ person }: { person: Person }) {
 
 /**
  * Every account on the product in one list, because an operator asked for help
- * knows an email address and rarely which workspace it belongs to.
+ * knows an email address and rarely which tenant it belongs to.
  */
 export function PeopleDirectory({ people }: { people: Person[] }) {
   const [query, setQuery] = useState("");
@@ -96,7 +96,7 @@ export function PeopleDirectory({ people }: { people: Person[] }) {
     const needle = query.trim().toLowerCase();
     if (!needle) return people;
     return people.filter((person) =>
-      [person.email, person.name, ...person.workspaces.map((w) => `${w.name} ${w.slug}`)]
+      [person.email, person.name, ...person.tenants.map((t) => `${t.name} ${t.slug}`)]
         .join(" ")
         .toLowerCase()
         .includes(needle),
@@ -110,7 +110,7 @@ export function PeopleDirectory({ people }: { people: Person[] }) {
           <p className="eyebrow">People</p>
           <h2 className="mt-1 text-[20px] leading-6">Every account</h2>
           <p className="mt-1 text-[13px] text-slate">
-            {people.length} account{people.length === 1 ? "" : "s"} across all workspaces. Resetting a
+            {people.length} account{people.length === 1 ? "" : "s"} across all tenants. Resetting a
             password or resending a welcome issues a new temporary password and forces a change at
             the next sign-in.
           </p>
@@ -123,7 +123,7 @@ export function PeopleDirectory({ people }: { people: Person[] }) {
             id="people-search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="email, name or workspace"
+            placeholder="email, name or tenant"
             className="field w-full py-[10px] text-[13px] sm:w-[260px]"
           />
         </div>

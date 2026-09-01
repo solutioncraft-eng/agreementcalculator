@@ -10,7 +10,7 @@ import { TenantRow } from "./tenant-row";
 export const dynamic = "force-dynamic";
 
 /**
- * Operator dashboard: which workspaces exist, how much they are used and
+ * Operator dashboard: which tenants exist, how much they are used and
  * whether they are healthy. Deliberately built from counts and timestamps —
  * quote contents and COGS costs are a tenant's confidential pricing and are
  * never read here.
@@ -39,7 +39,7 @@ export default async function SuperPage() {
     lastEvents.filter((row) => row.tenantId).map((row) => [row.tenantId as string, row._max.createdAt]),
   );
 
-  // Every account on the product, whichever workspaces they belong to — an
+  // Every account on the product, whichever tenants they belong to — an
   // account with no membership is an invitation that was never completed, and is
   // exactly the kind of thing an operator is asked to fix.
   const accounts = await prisma.user.findMany({
@@ -67,7 +67,7 @@ export default async function SuperPage() {
     mustReset: account.mustReset,
     lastLogin: account.lastLoginAt ? formatUtc(account.lastLoginAt) : null,
     createdAt: formatUtc(account.createdAt),
-    workspaces: account.memberships.map((membership) => ({
+    tenants: account.memberships.map((membership) => ({
       name: membership.tenant.name,
       slug: membership.tenant.slug,
       role: membership.role,
@@ -82,7 +82,7 @@ export default async function SuperPage() {
   }));
 
   const totals = {
-    workspaces: tenants.length,
+    tenants: tenants.length,
     people: tenants.reduce((sum, t) => sum + t._count.memberships, 0),
     quotes: tenants.reduce((sum, t) => sum + t._count.quoteRequests, 0),
     exports: tenants.reduce((sum, t) => sum + t._count.exports, 0),
@@ -92,15 +92,15 @@ export default async function SuperPage() {
     <div className="space-y-8">
       <header>
         <p className="eyebrow">Operator</p>
-        <h1 className="mt-2 text-[32px] leading-9">Workspaces</h1>
+        <h1 className="mt-2 text-[32px] leading-9">Tenants</h1>
         <p className="mt-2 max-w-2xl text-slate">
-          Every workspace on the product, with the pricing model it adopted and how much it is being used.
+          Every tenant on the product, with the pricing model it adopted and how much it is being used.
         </p>
       </header>
 
       <div className="grid gap-4 sm:grid-cols-4">
         {[
-          ["Workspaces", totals.workspaces],
+          ["Tenants", totals.tenants],
           ["People", totals.people],
           ["Quotes in review", totals.quotes],
           ["PDF exports", totals.exports],
@@ -149,7 +149,7 @@ export default async function SuperPage() {
           );
         })}
         {tenants.length === 0 ? (
-          <p className="card text-slate">No workspaces yet — create the first one below.</p>
+          <p className="card text-slate">No tenants yet — create the first one below.</p>
         ) : null}
       </section>
 
