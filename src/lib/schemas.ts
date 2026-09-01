@@ -16,8 +16,8 @@ export const calcInputsSchema = z.object({
   sgmPct: z.coerce.number().min(0).max(95),
   perUserFloor: z.coerce.number().min(0).max(10_000),
   floorOverride: z.coerce.boolean(),
-  addonMultiplier: z.coerce.number().min(1).max(20),
-  markupMultiple: z.coerce.number().min(1).max(50),
+  addonMultiplier: z.coerce.number().min(1, "Add-on multiplier must be at least 1× cost.").max(20),
+  markupMultiple: z.coerce.number().min(1, "Markup must be at least 1× cost.").max(50),
   bundleKey: z.string().min(1).max(64),
 });
 

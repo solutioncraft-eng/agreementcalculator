@@ -91,6 +91,24 @@ test("applyBundle caps a discount at the cost floor rather than selling below it
   assert.deepEqual(uncapped, { final: 50, capped: false, discount: 50 });
 });
 
+test("an offering later in display order can price below an earlier one", () => {
+  // A standalone offering carries only its own cheap tool, so display order
+  // says nothing about which rate is higher.
+  const config: PricingConfig = {
+    ...CONFIG,
+    tiers: [...TIERS, { key: "solo", label: "Solo", sortOrder: 2, parentKey: null }],
+    items: [
+      ...ITEMS,
+      { key: "tool-solo", label: "Tool Solo", unit: "USER", tierKeys: ["solo"], unitCost: 0.5, sortOrder: 2 },
+    ],
+  };
+  const [core, , solo] = calculate(config, { ...INPUTS, perUserFloor: 0 }).tiers;
+
+  assert.ok(solo.index > core.index);
+  assert.ok(solo.headlineRate < core.headlineRate);
+  assert.equal(ratesDiffer(solo.headlineRate, core.headlineRate), true);
+});
+
 test("offerings sharing a floor rate are not treated as an upgrade step", () => {
   // 100 users at the $200/user floor lifts both offerings onto $20,000.
   const result = calculate(CONFIG, { ...INPUTS, users: 100, perUserFloor: 200 });

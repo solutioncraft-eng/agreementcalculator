@@ -19,6 +19,17 @@ import { calculate } from "@/lib/pricing/models";
 import { submitForReview, type SubmitState } from "./actions";
 import { downloadExport } from "@/lib/export-client";
 
+/**
+ * The add-on multiplier is typed rather than dragged, so it is clamped to the
+ * range the server accepts — a rate built from a value the server would reject
+ * is not a rate anyone can quote.
+ */
+function clampMultiplier(raw: string): number {
+  const value = Number(raw);
+  if (!Number.isFinite(value)) return 1;
+  return Math.min(Math.max(value, 1), 20);
+}
+
 const UNIT_LABEL: Record<string, string> = {
   USER: "per user",
   DEVICE: "per device",
@@ -200,8 +211,9 @@ export function CalculatorClient({
                     type="number"
                     min={1}
                     step={0.01}
+                    max={20}
                     value={inputs.addonMultiplier}
-                    onChange={(e) => set("addonMultiplier", Number(e.target.value))}
+                    onChange={(e) => set("addonMultiplier", clampMultiplier(e.target.value))}
                     disabled={config.model !== "COST_PLUS"}
                     className={clsx(
                       "field mt-1",
@@ -314,7 +326,9 @@ export function CalculatorClient({
                   footnote={
                     step && previous
                       ? ratesDiffer(tierResult.headlineRate, previous.headlineRate)
-                        ? `+${moneyRounded(step.headlineRate)}/mo over ${previous.label}`
+                        ? `${step.headlineRate > 0 ? "+" : "−"}${moneyRounded(
+                            Math.abs(step.headlineRate),
+                          )}/mo over ${previous.label}`
                         : `Same rate as ${previous.label} at this floor`
                       : undefined
                   }

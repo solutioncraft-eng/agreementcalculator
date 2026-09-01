@@ -238,23 +238,26 @@ export function QuoteDocument({ result, tierKey, clientName, notes, stamp, works
             <Text style={styles.sectionTitle}>
               {others.length === 1 ? "ALTERNATIVE OFFERING" : "ALTERNATIVE OFFERINGS"}
             </Text>
-            {others.map((other) => (
-              <View key={other.key}>
-                <View style={styles.row}>
-                  <Text>{other.label}</Text>
-                  <Text>
-                    {moneyRounded(other.headlineRate)} / month · {money(other.headlinePerUser)} per user
+            {others.map((other) => {
+              // Signed off the rates, not the offering order: an offering
+              // further up the ladder can still land on a cheaper rate.
+              const step = other.headlineRate - t.headlineRate;
+              return (
+                <View key={other.key}>
+                  <View style={styles.row}>
+                    <Text>{other.label}</Text>
+                    <Text>
+                      {moneyRounded(other.headlineRate)} / month · {money(other.headlinePerUser)} per user
+                    </Text>
+                  </View>
+                  <Text style={[styles.rowMuted, { marginTop: 2 }]}>
+                    {ratesDiffer(other.headlineRate, t.headlineRate)
+                      ? `${step > 0 ? "+" : "−"}${moneyRounded(Math.abs(step))} per month against ${tierName}.`
+                      : `Same monthly rate as ${tierName}.`}
                   </Text>
                 </View>
-                <Text style={[styles.rowMuted, { marginTop: 2 }]}>
-                  {ratesDiffer(other.headlineRate, t.headlineRate)
-                    ? `${other.index > t.index ? "+" : "−"}${moneyRounded(
-                        Math.abs(other.headlineRate - t.headlineRate),
-                      )} per month against ${tierName}.`
-                    : `Same monthly rate as ${tierName}.`}
-                </Text>
-              </View>
-            ))}
+              );
+            })}
           </View>
         ) : null}
 
