@@ -252,7 +252,10 @@ export function QuoteDocument({ result, tierKey, clientName, notes, stamp, works
                   </View>
                   <Text style={[styles.rowMuted, { marginTop: 2 }]}>
                     {ratesDiffer(other.headlineRate, t.headlineRate)
-                      ? `${step > 0 ? "+" : "−"}${moneyRounded(Math.abs(step))} per month against ${tierName}.`
+                      ? // ASCII hyphen, not U+2212: the built-in Helvetica these
+                        // documents use is WinAnsi-encoded and renders a real
+                        // minus sign as nothing at all.
+                        `${step > 0 ? "+" : "-"}${moneyRounded(Math.abs(step))} per month against ${tierName}.`
                       : `Same monthly rate as ${tierName}.`}
                   </Text>
                 </View>
