@@ -16,7 +16,7 @@ async function tenantOr(tenantId: unknown): Promise<Tenant | null> {
   return prisma.tenant.findUnique({ where: { id } });
 }
 
-/** Records what an operator did to a workspace's billing, with them as actor. */
+/** Records what an operator did to a tenant's billing, with them as actor. */
 async function record(
   operator: SessionAccount,
   tenant: Tenant,
@@ -45,13 +45,13 @@ async function record(
 
 const compSchema = z.object({
   tenantId: z.string().min(1),
-  reason: z.string().trim().min(3, "Say why this workspace is complimentary.").max(200),
+  reason: z.string().trim().min(3, "Say why this tenant is complimentary.").max(200),
   /** Blank means open-ended. */
   expiresOn: z.string().trim(),
 });
 
 /**
- * Marks a workspace complimentary: it keeps working without paying, and is
+ * Marks a tenant complimentary: it keeps working without paying, and is
  * reported as comped rather than subscribed so it is never mistaken for
  * revenue. Any Stripe subscription is deliberately left alone — cancel it
  * separately if the customer is not meant to keep being charged, which the
@@ -67,7 +67,7 @@ export async function grantComplimentary(_prev: SuperState, formData: FormData):
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the comp details." };
 
   const tenant = await tenantOr(parsed.data.tenantId);
-  if (!tenant) return { error: "That workspace no longer exists." };
+  if (!tenant) return { error: "That tenant no longer exists." };
 
   let expiresAt: Date | null = null;
   if (parsed.data.expiresOn) {
@@ -103,13 +103,13 @@ export async function grantComplimentary(_prev: SuperState, formData: FormData):
 }
 
 /**
- * Ends a comp. The workspace drops back to whatever it can stand on by itself —
+ * Ends a comp. The tenant drops back to whatever it can stand on by itself —
  * a live subscription, a trial that has not run out, or the paywall.
  */
 export async function endComplimentary(_prev: SuperState, formData: FormData): Promise<SuperState> {
   const operator = await requireSuperAdmin();
   const tenant = await tenantOr(formData.get("tenantId"));
-  if (!tenant) return { error: "That workspace no longer exists." };
+  if (!tenant) return { error: "That tenant no longer exists." };
   if (tenant.status !== "COMPLIMENTARY") return { error: `${tenant.name} is not complimentary.` };
 
   await prisma.tenant.update({
@@ -130,7 +130,7 @@ export async function endComplimentary(_prev: SuperState, formData: FormData): P
 }
 
 /**
- * Gives a workspace a fresh trial from today.
+ * Gives a tenant a fresh trial from today.
  *
  * A lapsed subscription is cleared at the same time, because otherwise the
  * cancelled state would keep the paywall up and the new trial would be a lie.
@@ -142,7 +142,7 @@ export async function endComplimentary(_prev: SuperState, formData: FormData): P
 export async function resetTrial(_prev: SuperState, formData: FormData): Promise<SuperState> {
   const operator = await requireSuperAdmin();
   const tenant = await tenantOr(formData.get("tenantId"));
-  if (!tenant) return { error: "That workspace no longer exists." };
+  if (!tenant) return { error: "That tenant no longer exists." };
 
   const healthy = tenant.subscriptionStatus === "active" || tenant.subscriptionStatus === "trialing";
   if (healthy) {
@@ -183,7 +183,7 @@ const graceSchema = z.object({
   days: z.coerce.number().int().min(1, "Give it at least a day.").max(60, "60 days is the most."),
 });
 
-/** Buys a workspace more time while a payment is being sorted out. */
+/** Buys a tenant more time while a payment is being sorted out. */
 export async function extendGrace(_prev: SuperState, formData: FormData): Promise<SuperState> {
   const operator = await requireSuperAdmin();
   const parsed = graceSchema.safeParse({
@@ -193,7 +193,7 @@ export async function extendGrace(_prev: SuperState, formData: FormData): Promis
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the number of days." };
 
   const tenant = await tenantOr(parsed.data.tenantId);
-  if (!tenant) return { error: "That workspace no longer exists." };
+  if (!tenant) return { error: "That tenant no longer exists." };
 
   // Measured from now rather than from the existing deadline, so extending a
   // window that already closed gives the promised number of days.
@@ -225,7 +225,7 @@ const cancelSchema = z.object({
 });
 
 /**
- * Cancels a workspace's subscription in Stripe. Nothing about the workspace's
+ * Cancels a tenant's subscription in Stripe. Nothing about the tenant's
  * own state is written here: the resulting webhook is what records it, which
  * keeps Stripe the single authority even when the cancellation started with us.
  */
@@ -238,7 +238,7 @@ export async function cancelSubscription(_prev: SuperState, formData: FormData):
   if (!parsed.success) return { error: "That cancellation option is not valid." };
 
   const tenant = await tenantOr(parsed.data.tenantId);
-  if (!tenant) return { error: "That workspace no longer exists." };
+  if (!tenant) return { error: "That tenant no longer exists." };
   if (!stripeConfigured) return { error: "Stripe is not configured on this deployment." };
   if (!tenant.stripeSubscriptionId) return { error: `${tenant.name} has no Stripe subscription.` };
 

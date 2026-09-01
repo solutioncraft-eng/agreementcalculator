@@ -19,7 +19,7 @@ export interface SuperState {
 }
 
 const createSchema = z.object({
-  name: z.string().trim().min(2, "Name the workspace.").max(80),
+  name: z.string().trim().min(2, "Name the tenant.").max(80),
   slug: z.string().trim().toLowerCase(),
   pricingModel: z.enum(["COST_PLUS", "MARKUP_MULTIPLE"]),
   adminEmail: z.string().trim().toLowerCase().email("Enter the first administrator's email."),
@@ -28,12 +28,12 @@ const createSchema = z.object({
 });
 
 /**
- * Creates a workspace and invites its first administrator.
+ * Creates a tenant and invites its first administrator.
  *
- * An operator-created workspace has no trial deadline — it is set up after a
+ * An operator-created tenant has no trial deadline — it is set up after a
  * conversation, not from a signup form — so it stays open until the operator
  * says otherwise. Seeding the reference catalogue is optional: it is a starting
- * point to edit, not a claim about the workspace's own vendors.
+ * point to edit, not a claim about the tenant's own vendors.
  */
 export async function createTenant(_prev: SuperState, formData: FormData): Promise<SuperState> {
   const operator = await requireSuperAdmin();
@@ -47,7 +47,7 @@ export async function createTenant(_prev: SuperState, formData: FormData): Promi
     adminName: formData.get("adminName"),
     seedCatalog: formData.get("seedCatalog") === "on",
   });
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the workspace details." };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the tenant details." };
 
   const { slug, pricingModel, adminEmail, adminName, seedCatalog } = parsed.data;
   if (!isValidSlug(slug)) {
@@ -72,7 +72,7 @@ export async function createTenant(_prev: SuperState, formData: FormData): Promi
     action: "TENANT_CREATED",
     entity: "Tenant",
     entityId: tenant.id,
-    summary: `Workspace ${tenant.name} (${slug}) created by ${operator.email}, ${adminEmail} invited as administrator`,
+    summary: `Tenant ${tenant.name} (${slug}) created by ${operator.email}, ${adminEmail} invited as administrator`,
     after: { slug, name: tenant.name, pricingModel: model, seededCatalog: seedCatalog },
     tenantId: tenant.id,
     actor: operator,
@@ -107,7 +107,7 @@ const statusSchema = z.object({
   status: z.enum(["TRIAL", "ACTIVE", "SUSPENDED"]),
 });
 
-/** Suspends or reinstates a workspace. Suspension blocks every sign-in into it. */
+/** Suspends or reinstates a tenant. Suspension blocks every sign-in into it. */
 export async function setTenantStatus(_prev: SuperState, formData: FormData): Promise<SuperState> {
   const operator = await requireSuperAdmin();
   const parsed = statusSchema.safeParse({
@@ -117,7 +117,7 @@ export async function setTenantStatus(_prev: SuperState, formData: FormData): Pr
   if (!parsed.success) return { error: "That status is not valid." };
 
   const tenant = await prisma.tenant.findUnique({ where: { id: parsed.data.tenantId } });
-  if (!tenant) return { error: "That workspace no longer exists." };
+  if (!tenant) return { error: "That tenant no longer exists." };
   if (tenant.status === parsed.data.status) return { ok: `${tenant.name} is already ${tenant.status}.` };
 
   await prisma.tenant.update({ where: { id: tenant.id }, data: { status: parsed.data.status } });
@@ -142,7 +142,7 @@ const modelSchema = z.object({
 });
 
 /**
- * Changes a workspace's pricing model. Locked to the operator on purpose: the
+ * Changes a tenant's pricing model. Locked to the operator on purpose: the
  * model is chosen at setup, and switching it after a version is published
  * changes what every future quote means, so it needs a conversation first.
  */
@@ -155,7 +155,7 @@ export async function setPricingModel(_prev: SuperState, formData: FormData): Pr
   if (!parsed.success) return { error: "That pricing model is not valid." };
 
   const tenant = await prisma.tenant.findUnique({ where: { id: parsed.data.tenantId } });
-  if (!tenant) return { error: "That workspace no longer exists." };
+  if (!tenant) return { error: "That tenant no longer exists." };
   if (tenant.pricingModel === parsed.data.pricingModel) {
     return { ok: `${tenant.name} already uses ${PRICING_MODELS[tenant.pricingModel].label}.` };
   }
@@ -178,5 +178,73 @@ export async function setPricingModel(_prev: SuperState, formData: FormData): Pr
   revalidatePath("/super");
   return {
     ok: `${tenant.name} now uses ${PRICING_MODELS[parsed.data.pricingModel].label}. Their next draft picks it up; published versions keep the model they were published with.`,
+  };
+}
+
+const deleteSchema = z.object({
+  tenantId: z.string().min(1),
+  confirmSlug: z.string().trim().toLowerCase(),
+});
+
+/** Stripe states in which the customer is still on the hook for money. */
+const LIVE_SUBSCRIPTION = new Set(["active", "trialing", "past_due", "unpaid"]);
+
+/**
+ * Deletes a tenant and everything it owns: memberships, pricing versions,
+ * quotes, exports and its audit trail all cascade from the row.
+ *
+ * Irreversible, so it asks for the subdomain to be typed back, and refuses
+ * while Stripe still has a live subscription — deleting the row would leave a
+ * customer being charged for something that no longer exists. The event is
+ * recorded product-level rather than against the tenant, since an audit event
+ * carrying its `tenantId` would be deleted along with it.
+ */
+export async function deleteTenant(_prev: SuperState, formData: FormData): Promise<SuperState> {
+  const operator = await requireSuperAdmin();
+  const parsed = deleteSchema.safeParse({
+    tenantId: formData.get("tenantId"),
+    confirmSlug: formData.get("confirmSlug"),
+  });
+  if (!parsed.success) return { error: "Type the subdomain to confirm." };
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: parsed.data.tenantId },
+    include: {
+      _count: { select: { memberships: true, quoteRequests: true, exports: true } },
+    },
+  });
+  if (!tenant) return { error: "That tenant no longer exists." };
+  if (parsed.data.confirmSlug !== tenant.slug) {
+    return { error: `Type ${tenant.slug} exactly to delete this tenant.` };
+  }
+  if (tenant.stripeSubscriptionId && LIVE_SUBSCRIPTION.has(tenant.subscriptionStatus ?? "")) {
+    return {
+      error: `${tenant.name} still has a live Stripe subscription (${tenant.subscriptionStatus}). Cancel it under Billing & trial first.`,
+    };
+  }
+
+  await audit({
+    action: "TENANT_DELETED",
+    entity: "Tenant",
+    entityId: tenant.id,
+    summary: `Tenant ${tenant.name} (${tenant.slug}) deleted by ${operator.email} with ${tenant._count.memberships} member(s), ${tenant._count.quoteRequests} quote(s) and ${tenant._count.exports} export(s)`,
+    before: {
+      slug: tenant.slug,
+      name: tenant.name,
+      status: tenant.status,
+      pricingModel: tenant.pricingModel,
+      createdAt: tenant.createdAt.toISOString(),
+      memberships: tenant._count.memberships,
+      quoteRequests: tenant._count.quoteRequests,
+      exports: tenant._count.exports,
+    },
+    actor: operator,
+  });
+
+  await prisma.tenant.delete({ where: { id: tenant.id } });
+
+  revalidatePath("/super");
+  return {
+    ok: `${tenant.name} and all of its data are gone. Accounts that belonged only to it still exist and now have no tenant.`,
   };
 }

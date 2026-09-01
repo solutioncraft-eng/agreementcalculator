@@ -15,9 +15,9 @@ export function CreateTenantForm({
   return (
     <form action={action} className="card space-y-5">
       <div>
-        <h2 className="text-[22px]">Create a workspace</h2>
+        <h2 className="text-[22px]">Create a tenant</h2>
         <p className="mt-1 text-[13px] text-slate">
-          The workspace opens with a draft pricing version — its administrator reviews the costs and publishes
+          The tenant opens with a draft pricing version — its administrator reviews the costs and publishes
           before anyone can quote.
         </p>
       </div>
@@ -66,7 +66,7 @@ export function CreateTenantForm({
           ))}
         </div>
         <p className="mt-2 text-[12px] text-slate">
-          {chosen ? `${chosen.label} is adopted for every version this workspace publishes.` : null} Changing
+          {chosen ? `${chosen.label} is adopted for every version this tenant publishes.` : null} Changing
           it later is an operator action, since it changes what a quote means.
         </p>
       </fieldset>
@@ -100,7 +100,7 @@ export function CreateTenantForm({
       ) : null}
 
       <button type="submit" className="btn-primary" disabled={pending}>
-        {pending ? "Creating…" : "Create workspace"}
+        {pending ? "Creating…" : "Create tenant"}
       </button>
     </form>
   );

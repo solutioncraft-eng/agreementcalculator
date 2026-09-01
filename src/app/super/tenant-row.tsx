@@ -5,13 +5,14 @@ import clsx from "clsx";
 import type { TenantStatus } from "@prisma/client";
 import { setPricingModel, setTenantStatus, type SuperState } from "./actions";
 import { BillingControls } from "./billing-controls";
+import { DeleteTenant } from "./delete-tenant";
 
 interface Row {
   id: string;
   name: string;
   slug: string;
   status: TenantStatus;
-  /** What the workspace is running on: trial, subscription, or comp. */
+  /** What the tenant is running on: trial, subscription, or comp. */
   billing: string;
   /** Why it is comped, when it is. */
   compReason: string | null;
@@ -69,7 +70,7 @@ export function TenantRow({ tenant, models }: { tenant: Row; models: PricingMode
             </label>
             <select
               id={`model-${tenant.id}`}
-              // Remount when the workspace's model changes so the uncontrolled
+              // Remount when the tenant's model changes so the uncontrolled
               // select does not keep showing the pre-action value.
               key={tenant.pricingModel}
               name="pricingModel"
@@ -134,6 +135,15 @@ export function TenantRow({ tenant, models }: { tenant: Row; models: PricingMode
         status={tenant.status}
         compReason={tenant.compReason}
         hasSubscription={tenant.hasSubscription}
+      />
+
+      <DeleteTenant
+        tenantId={tenant.id}
+        name={tenant.name}
+        slug={tenant.slug}
+        people={tenant.people}
+        quotes={tenant.quotes}
+        exports={tenant.exports}
       />
     </div>
   );
