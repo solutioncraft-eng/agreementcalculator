@@ -5,7 +5,7 @@ import { formatUtc } from "@/lib/quotes";
 import { describeAccess, workspaceAccess } from "@/lib/billing";
 import { CreateTenantForm } from "./create-tenant-form";
 import { PeopleDirectory } from "./people-directory";
-import { TenantRow } from "./tenant-row";
+import { TenantList } from "./tenant-list";
 
 export const dynamic = "force-dynamic";
 
@@ -49,9 +49,19 @@ export default async function SuperPage() {
       email: true,
       name: true,
       isSuperAdmin: true,
+      active: true,
       mustReset: true,
       lastLoginAt: true,
       createdAt: true,
+      _count: {
+        select: {
+          quoteRequests: true,
+          reviews: true,
+          exports: true,
+          createdVersions: true,
+          publishedVersion: true,
+        },
+      },
       memberships: {
         orderBy: { createdAt: "asc" },
         select: { role: true, tenant: { select: { name: true, slug: true, status: true } } },
@@ -64,6 +74,16 @@ export default async function SuperPage() {
     email: account.email,
     name: account.name,
     isSuperAdmin: account.isSuperAdmin,
+    active: account.active,
+    // Attribution is kept forever, so an account that has produced anything can
+    // only be deactivated — the delete action refuses it too.
+    hasHistory:
+      account._count.quoteRequests +
+        account._count.reviews +
+        account._count.exports +
+        account._count.createdVersions +
+        account._count.publishedVersion >
+      0,
     mustReset: account.mustReset,
     lastLogin: account.lastLoginAt ? formatUtc(account.lastLoginAt) : null,
     createdAt: formatUtc(account.createdAt),
@@ -74,6 +94,34 @@ export default async function SuperPage() {
       suspended: membership.tenant.status === "SUSPENDED",
     })),
   }));
+
+  const rows = tenants.map((tenant) => {
+    const published = tenant.pricingVersions[0];
+    const access = workspaceAccess(tenant);
+    return {
+      id: tenant.id,
+      name: tenant.name,
+      slug: tenant.slug,
+      status: tenant.status,
+      billing: access.deadline
+        ? `${describeAccess(access)} · ${formatUtc(access.deadline)}`
+        : describeAccess(access),
+      compReason: tenant.compReason,
+      hasSubscription: Boolean(tenant.stripeSubscriptionId),
+      pricingModel: tenant.pricingModel,
+      pricingModelLabel: PRICING_MODELS[tenant.pricingModel].label,
+      createdAt: formatUtc(tenant.createdAt),
+      people: tenant._count.memberships,
+      quotes: tenant._count.quoteRequests,
+      exports: tenant._count.exports,
+      publishedVersion: published
+        ? `${published.label} · published ${published.publishedAt ? formatUtc(published.publishedAt) : "—"}`
+        : null,
+      lastActivity: lastActivity.get(tenant.id)
+        ? formatUtc(lastActivity.get(tenant.id) as Date)
+        : null,
+    };
+  });
 
   const models = Object.entries(PRICING_MODELS).map(([key, model]) => ({
     key,
@@ -114,44 +162,7 @@ export default async function SuperPage() {
         ))}
       </div>
 
-      <section className="space-y-3">
-        {tenants.map((tenant) => {
-          const published = tenant.pricingVersions[0];
-          const access = workspaceAccess(tenant);
-          return (
-            <TenantRow
-              key={tenant.id}
-              models={models}
-              tenant={{
-                id: tenant.id,
-                name: tenant.name,
-                slug: tenant.slug,
-                status: tenant.status,
-                billing: access.deadline
-                  ? `${describeAccess(access)} · ${formatUtc(access.deadline)}`
-                  : describeAccess(access),
-                compReason: tenant.compReason,
-                hasSubscription: Boolean(tenant.stripeSubscriptionId),
-                pricingModel: tenant.pricingModel,
-                pricingModelLabel: PRICING_MODELS[tenant.pricingModel].label,
-                createdAt: formatUtc(tenant.createdAt),
-                people: tenant._count.memberships,
-                quotes: tenant._count.quoteRequests,
-                exports: tenant._count.exports,
-                publishedVersion: published
-                  ? `${published.label} · published ${published.publishedAt ? formatUtc(published.publishedAt) : "—"}`
-                  : null,
-                lastActivity: lastActivity.get(tenant.id)
-                  ? formatUtc(lastActivity.get(tenant.id) as Date)
-                  : null,
-              }}
-            />
-          );
-        })}
-        {tenants.length === 0 ? (
-          <p className="card text-slate">No tenants yet — create the first one below.</p>
-        ) : null}
-      </section>
+      <TenantList models={models} tenants={rows} />
 
       <PeopleDirectory people={people} />
 

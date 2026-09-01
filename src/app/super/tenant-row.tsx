@@ -7,7 +7,7 @@ import { setPricingModel, setTenantStatus, type SuperState } from "./actions";
 import { BillingControls } from "./billing-controls";
 import { DeleteTenant } from "./delete-tenant";
 
-interface Row {
+export interface Row {
   id: string;
   name: string;
   slug: string;
