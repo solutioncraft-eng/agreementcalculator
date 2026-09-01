@@ -116,8 +116,9 @@ SMTP (`SMTP_HOST` / `_PORT` / `_USER` / `_PASSWORD` / `_FROM`) still works and i
 ## Branding
 
 One house style guide; each workspace adds its own logo, accent colour, PDF footer and tier labels at
-**Admin → Branding**. Tier labels matter because "Advantage / Pinnacle" are one MSP's product names — they are
-per-workspace strings everywhere in the UI and in PDFs.
+**Admin → Branding**. Offering names matter because a new workspace starts with generic ones (Parent Agreement,
+Add-On Agreement, Co-Managed Agreement) — they are per-version strings everywhere in the UI and in PDFs, and are
+meant to be renamed to the MSP's own product names while the first draft is still editable.
 
 Logo uploads need object storage, since the filesystem is read-only on Vercel: set `SUPABASE_URL`,
 `SUPABASE_SERVICE_ROLE_KEY` and `SUPABASE_LOGO_BUCKET` (a public bucket). Without them administrators can

@@ -756,7 +756,7 @@ function TierForm({
       <form action={action} className="grid gap-3 md:grid-cols-4 md:items-end">
         <input type="hidden" name="versionId" value={versionId} />
         {tier ? <input type="hidden" name="tierId" value={tier.id} /> : null}
-        <Field name="label" label="Offering name" defaultValue={tier?.label} placeholder="Pinnacle" />
+        <Field name="label" label="Offering name" defaultValue={tier?.label} placeholder="Co-Managed Agreement" />
         <Field
           name="description"
           label="One-line description"

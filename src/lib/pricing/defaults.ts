@@ -21,31 +21,52 @@ export const SEED_COST_PLUS_SETTINGS = {
 };
 
 /**
- * Offerings a new workspace starts with: a base offering and one built on it.
- * An admin can rename these, add more (built on any of them or standalone), or
- * drop back to one while the version is still a draft.
+ * Offerings a new workspace starts with, named and costed generically so an
+ * admin renames and re-costs them rather than inheriting someone else's stack:
+ * a parent agreement, an add-on built on it, and a standalone co-managed
+ * agreement that shares some tooling but carries its own membership. Together
+ * they demonstrate both ways to compose an offering. Any of them can be
+ * renamed, re-parented or removed while the version is still a draft.
  */
 export const SEED_SERVICE_TIERS = [
-  { key: "advantage", label: "Advantage", description: "Core managed services", parentKey: null },
   {
-    key: "pinnacle",
-    label: "Pinnacle",
-    description: "Adds the security stack",
-    parentKey: "advantage",
+    key: "parent",
+    label: "Parent Agreement",
+    description: "Fully managed core services",
+    parentKey: null,
+  },
+  {
+    key: "addon",
+    label: "Add-On Agreement",
+    description: "Parent Agreement plus the advanced security stack",
+    parentKey: "parent",
+  },
+  {
+    key: "co-managed",
+    label: "Co-Managed Agreement",
+    description: "Standalone: delivered alongside the client's own IT staff",
+    parentKey: null,
   },
 ] as const;
 
+/**
+ * Reference costs on a 25-user / 30-device / 2-location client. An item may
+ * serve several offerings: the co-managed agreement re-uses the shared tooling
+ * it needs and adds the two items only it carries.
+ */
 export const SEED_COGS_ITEMS = [
-  { key: "k365", label: "K365 Endpoint", vendor: "Datto RMM + SOC", unit: "DEVICE", tierKeys: ["advantage"], unitCost: 3.49 },
-  { key: "edr", label: "EDR", vendor: "SentinelOne", unit: "DEVICE", tierKeys: ["advantage"], unitCost: 2.85 },
-  { key: "pam", label: "Privilege management", vendor: "AutoElevate", unit: "DEVICE", tierKeys: ["advantage"], unitCost: 1.71 },
-  { key: "spam", label: "Spam + email filtering", vendor: "Avanan", unit: "USER", tierKeys: ["advantage"], unitCost: 1.5 },
-  { key: "vuln", label: "Vulnerability monitoring", vendor: "ConnectSecure", unit: "DEVICE", tierKeys: ["advantage"], unitCost: 0.15 },
-  { key: "net", label: "Network monitoring", vendor: "Domotz", unit: "LOCATION", tierKeys: ["advantage"], unitCost: 23 },
-  { key: "mfa", label: "MFA", vendor: "Duo", unit: "USER", tierKeys: ["pinnacle"], unitCost: 3 },
-  { key: "m365", label: "M365 Backup", vendor: "DropSuite", unit: "USER", tierKeys: ["pinnacle"], unitCost: 3 },
-  { key: "pw", label: "Password manager", vendor: "Keeper", unit: "USER", tierKeys: ["pinnacle"], unitCost: 2.25 },
-  { key: "sat", label: "Security awareness", vendor: "KnowBe4", unit: "USER", tierKeys: ["pinnacle"], unitCost: 1.5 },
+  { key: "rmm", label: "Remote monitoring and management", unit: "DEVICE", tierKeys: ["parent", "co-managed"], unitCost: 3.49 },
+  { key: "edr", label: "Endpoint detection and response", unit: "DEVICE", tierKeys: ["parent", "co-managed"], unitCost: 2.85 },
+  { key: "pam", label: "Privileged access management", unit: "DEVICE", tierKeys: ["parent"], unitCost: 1.71 },
+  { key: "email", label: "Email security and spam filtering", unit: "USER", tierKeys: ["parent", "co-managed"], unitCost: 1.5 },
+  { key: "vuln", label: "Vulnerability monitoring", unit: "DEVICE", tierKeys: ["parent"], unitCost: 0.15 },
+  { key: "net", label: "Network monitoring", unit: "LOCATION", tierKeys: ["parent"], unitCost: 23 },
+  { key: "mfa", label: "Multi-factor authentication", unit: "USER", tierKeys: ["addon"], unitCost: 3 },
+  { key: "backup", label: "Cloud mailbox and file backup", unit: "USER", tierKeys: ["addon"], unitCost: 3 },
+  { key: "pw", label: "Password manager", unit: "USER", tierKeys: ["addon"], unitCost: 2.25 },
+  { key: "sat", label: "Security awareness training", unit: "USER", tierKeys: ["addon"], unitCost: 1.5 },
+  { key: "portal", label: "Shared service desk portal", unit: "USER", tierKeys: ["co-managed"], unitCost: 2 },
+  { key: "docs", label: "Documentation and asset platform", unit: "USER", tierKeys: ["co-managed"], unitCost: 1.25 },
 ] as const;
 
 export const SEED_BUNDLES = [
