@@ -317,7 +317,24 @@ export function applyBundle(standard: number, costFloor: number, bundlePct: numb
   const raw = standard * (1 - bundlePct);
   const capped = bundlePct > 0 && raw < costFloor;
   const final = Math.max(raw, costFloor);
-  return { final, capped, discount: standard - final };
+  // A standard rate that is itself under cost (a low add-on multiplier or a
+  // markup below 1) is lifted to the floor, which is a surcharge rather than a
+  // discount, so the discount stays at zero and `costFloorLift` carries it.
+  return { final, capped, discount: Math.max(standard - final, 0) };
+}
+
+/** What the cost floor added back to a rate the levers put below cost. */
+export function costFloorLift(tier: TierResult): number {
+  return round2(Math.max(tier.discountedRate - tier.standardRate, 0));
+}
+
+/**
+ * Two headline rates are the same quote when they are within half a dollar:
+ * the per-user floor routinely lands several offerings on one rate, and no
+ * surface may advertise a step between them.
+ */
+export function ratesDiffer(a: number, b: number): boolean {
+  return Math.abs(a - b) > 0.5;
 }
 
 /** Per-user floor handling, shared by every model. */

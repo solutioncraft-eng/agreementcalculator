@@ -4,8 +4,10 @@ import { useActionState, useMemo, useState } from "react";
 import clsx from "clsx";
 import {
   achievedSgmPct,
+  costFloorLift,
   includedLines,
   money,
+  ratesDiffer,
   tierChain,
   moneyRounded,
   tierResultFor,
@@ -16,6 +18,17 @@ import {
 import { calculate } from "@/lib/pricing/models";
 import { submitForReview, type SubmitState } from "./actions";
 import { downloadExport } from "@/lib/export-client";
+
+/**
+ * The add-on multiplier is typed rather than dragged, so it is clamped to the
+ * range the server accepts — a rate built from a value the server would reject
+ * is not a rate anyone can quote.
+ */
+function clampMultiplier(raw: string): number {
+  const value = Number(raw);
+  if (!Number.isFinite(value)) return 1;
+  return Math.min(Math.max(value, 1), 20);
+}
 
 const UNIT_LABEL: Record<string, string> = {
   USER: "per user",
@@ -198,8 +211,9 @@ export function CalculatorClient({
                     type="number"
                     min={1}
                     step={0.01}
+                    max={20}
                     value={inputs.addonMultiplier}
-                    onChange={(e) => set("addonMultiplier", Number(e.target.value))}
+                    onChange={(e) => set("addonMultiplier", clampMultiplier(e.target.value))}
                     disabled={config.model !== "COST_PLUS"}
                     className={clsx(
                       "field mt-1",
@@ -274,8 +288,8 @@ export function CalculatorClient({
                 This configuration falls outside standard pricing
               </h2>
               <ul className="mt-3 space-y-1 text-[14px]">
-                {result.triggers.map((t) => (
-                  <li key={t.code} className="flex gap-2">
+                {result.triggers.map((t, index) => (
+                  <li key={`${t.code}-${index}`} className="flex gap-2">
                     <span className="text-orange">▸</span>
                     <span>{t.message}</span>
                   </li>
@@ -311,8 +325,10 @@ export function CalculatorClient({
                   onSelect={() => setTierKey(tierResult.key)}
                   footnote={
                     step && previous
-                      ? step.headlineRate > 0.5
-                        ? `+${moneyRounded(step.headlineRate)}/mo over ${previous.label}`
+                      ? ratesDiffer(tierResult.headlineRate, previous.headlineRate)
+                        ? `${step.headlineRate > 0 ? "+" : "−"}${moneyRounded(
+                            Math.abs(step.headlineRate),
+                          )}/mo over ${previous.label}`
                         : `Same rate as ${previous.label} at this floor`
                       : undefined
                   }
@@ -381,6 +397,12 @@ export function CalculatorClient({
                     <Line
                       label={`${result.bundle.label} discount${selected.discountCappedAtCost ? " (capped at cost)" : ""}`}
                       value={`-${money(selected.discount)}`}
+                    />
+                  ) : null}
+                  {costFloorLift(selected) > 0 ? (
+                    <Line
+                      label="Lifted to the hard cost floor"
+                      value={money(costFloorLift(selected))}
                     />
                   ) : null}
                   {selected.belowFloor ? (
