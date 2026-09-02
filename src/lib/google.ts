@@ -17,6 +17,15 @@ const jwks = createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2/v3/ce
 const HANDSHAKE_COOKIE = "ac_oauth";
 const HANDSHAKE_TTL_SECONDS = 10 * 60;
 
+/**
+ * Carries the Google identity from the callback into the signup form, for
+ * somebody Google vouches for who has no account here yet. Signed rather than
+ * held in a URL or a form field: the workspace it creates is administered by
+ * whichever address this says, so the form cannot be allowed to change it.
+ */
+const SIGNUP_COOKIE = "ac_google_signup";
+const SIGNUP_TTL_SECONDS = 30 * 60;
+
 export interface GoogleConfig {
   clientId: string;
   clientSecret: string;
@@ -120,6 +129,8 @@ export function statesMatch(a: string, b: string): boolean {
 
 export const GOOGLE_HANDSHAKE_COOKIE = HANDSHAKE_COOKIE;
 export const GOOGLE_HANDSHAKE_TTL_SECONDS = HANDSHAKE_TTL_SECONDS;
+export const GOOGLE_SIGNUP_COOKIE = SIGNUP_COOKIE;
+export const GOOGLE_SIGNUP_TTL_SECONDS = SIGNUP_TTL_SECONDS;
 
 function secret(): Uint8Array {
   const value = process.env.AUTH_SECRET;
@@ -146,6 +157,30 @@ export async function openHandshake(token: string): Promise<Handshake | null> {
       return null;
     }
     return { state, verifier, nonce };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The Google identity behind an unfinished signup, sealed for the form. `use`
+ * keeps it from being presented as the handshake token, which the same key
+ * signs.
+ */
+export async function sealSignup(identity: GoogleIdentity): Promise<string> {
+  return new SignJWT({ use: "signup", sub: identity.sub, email: identity.email, name: identity.name })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime(`${SIGNUP_TTL_SECONDS}s`)
+    .sign(secret());
+}
+
+export async function openSignup(token: string): Promise<GoogleIdentity | null> {
+  try {
+    const { payload } = await jwtVerify(token, secret());
+    const { use, sub, email, name } = payload;
+    if (use !== "signup" || typeof sub !== "string" || typeof email !== "string") return null;
+    return { sub, email, name: typeof name === "string" ? name : null };
   } catch {
     return null;
   }

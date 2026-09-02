@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
+import { GOOGLE_SIGNUP_COOKIE, googleEnabled, googleStartUrl, openSignup } from "@/lib/google";
 import { PRICING_MODELS } from "@/lib/pricing/models";
 import { PRODUCT_NAME } from "@/lib/seo";
 import { rootDomain, slugFromHost } from "@/lib/tenant";
@@ -36,6 +38,12 @@ export default async function SignupPage() {
   if (await slugFromHost()) redirect("/login");
   if (await getCurrentUser()) redirect("/calculator");
 
+  // Set by the Google callback when the person it vouched for has no account
+  // here: the address is settled, so what is left is which company they price
+  // for.
+  const pending = (await cookies()).get(GOOGLE_SIGNUP_COOKIE)?.value;
+  const google = pending ? await openSignup(pending) : null;
+
   const models = Object.entries(PRICING_MODELS).map(([key, model]) => ({
     key,
     label: model.label,
@@ -51,8 +59,9 @@ export default async function SignupPage() {
           <p className="eyebrow">Free for {TRIAL_DAYS} days</p>
           <h1 className="mt-2 text-[36px] leading-10">Set up your workspace</h1>
           <p className="mt-3 text-[17px] text-slate">
-            You are the administrator. Load your costs, set your margin policy, publish a pricing version —
-            then your account managers quote inside it.
+            {google
+              ? `Google has confirmed ${google.email}. Name the company you price for and you are the administrator of its workspace.`
+              : "You are the administrator. Load your costs, set your margin policy, publish a pricing version — then your account managers quote inside it."}
           </p>
 
           <ul className="mt-8 space-y-4 text-[15px]">
@@ -83,7 +92,12 @@ export default async function SignupPage() {
         </section>
 
         <section className="card h-fit">
-          <SignupForm models={models} rootDomain={rootDomain()} />
+          <SignupForm
+            models={models}
+            rootDomain={rootDomain()}
+            google={google}
+            googleStartUrl={googleEnabled() ? googleStartUrl() : undefined}
+          />
           <p className="mt-5 border-t border-mist pt-4 text-[13px] text-slate">
             Already have an account?{" "}
             <Link href="/login" className="font-medium text-orange">

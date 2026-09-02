@@ -1,11 +1,13 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { createSession } from "@/lib/auth";
 import { sendMail } from "@/lib/email";
+import { GOOGLE_SIGNUP_COOKIE, openSignup } from "@/lib/google";
 import { provisionWorkspace } from "@/lib/provisioning";
 import { isValidSlug, slugFromName, tenantUrl } from "@/lib/tenant";
 import { PRICING_MODELS } from "@/lib/pricing/models";
@@ -22,7 +24,7 @@ const schema = z.object({
   slug: z.string().trim().toLowerCase(),
   name: z.string().trim().min(2, "Enter your name.").max(80),
   email: z.string().trim().toLowerCase().email("Enter a valid work email."),
-  password: z.string().min(12, "Use a password of at least 12 characters."),
+  password: z.string().min(12, "Use a password of at least 12 characters.").optional(),
   pricingModel: z.enum(["COST_PLUS", "MARKUP_MULTIPLE"]),
 });
 
@@ -35,12 +37,19 @@ const schema = z.object({
  * converts the workspace to ACTIVE when it starts paying.
  */
 export async function signUp(_prev: SignupState, formData: FormData): Promise<SignupState> {
+  const store = await cookies();
+  const pending = store.get(GOOGLE_SIGNUP_COOKIE)?.value;
+  // Google has already vouched for an address, so that is the one the workspace
+  // is set up for: the form's own email field is not consulted, and there is no
+  // password to choose.
+  const google = pending ? await openSignup(pending) : null;
+
   const company = String(formData.get("company") ?? "").trim();
   const values = {
     company,
     slug: String(formData.get("slug") ?? "").trim(),
     name: String(formData.get("name") ?? "").trim(),
-    email: String(formData.get("email") ?? "").trim(),
+    email: google?.email ?? String(formData.get("email") ?? "").trim(),
   };
 
   const parsed = schema.safeParse({
@@ -48,7 +57,7 @@ export async function signUp(_prev: SignupState, formData: FormData): Promise<Si
     slug: values.slug || slugFromName(company),
     name: values.name,
     email: values.email,
-    password: formData.get("password"),
+    password: google ? undefined : formData.get("password"),
     pricingModel: formData.get("pricingModel") ?? "COST_PLUS",
   });
   if (!parsed.success) {
@@ -56,6 +65,10 @@ export async function signUp(_prev: SignupState, formData: FormData): Promise<Si
   }
 
   const { slug, email, name, password, pricingModel } = parsed.data;
+  // Only Google may stand in for a password; a plain signup chooses one.
+  if (!google && !password) {
+    return { error: "Use a password of at least 12 characters.", values };
+  }
   if (!isValidSlug(slug)) {
     return {
       error: `"${slug}" cannot be used as a workspace address — letters, numbers and hyphens only.`,
@@ -71,6 +84,9 @@ export async function signUp(_prev: SignupState, formData: FormData): Promise<Si
   if (await prisma.user.findUnique({ where: { email } })) {
     return { error: "That email already has an account — sign in instead.", values };
   }
+  if (google && (await prisma.user.findUnique({ where: { googleSub: google.sub } }))) {
+    return { error: "That Google account already has an account here — sign in instead.", values };
+  }
 
   const trialEndsAt = trialEndFrom(new Date());
   const { tenant, admin } = await provisionWorkspace({
@@ -78,15 +94,19 @@ export async function signUp(_prev: SignupState, formData: FormData): Promise<Si
     slug,
     pricingModel,
     seedCatalog: true,
-    admin: { email, name, password },
+    admin: { email, name, password, googleSub: google?.sub },
     trialEndsAt,
   });
+  // Whatever happens next, the invitation to finish a Google signup is spent.
+  if (google) store.delete({ name: GOOGLE_SIGNUP_COOKIE, path: "/" });
 
   await audit({
     action: "TENANT_CREATED",
     entity: "Tenant",
     entityId: tenant.id,
-    summary: `Workspace ${tenant.name} (${slug}) signed up by ${email}, trial ends ${trialEndsAt.toISOString()}`,
+    summary: `Workspace ${tenant.name} (${slug}) signed up by ${email}${
+      google ? " with Google" : ""
+    }, trial ends ${trialEndsAt.toISOString()}`,
     after: { slug, name: tenant.name, pricingModel, trialEndsAt: trialEndsAt.toISOString() },
     tenantId: tenant.id,
     actorEmail: email,
@@ -96,7 +116,7 @@ export async function signUp(_prev: SignupState, formData: FormData): Promise<Si
   await createSession(admin.id, tenant.id);
   await audit({
     action: "LOGIN",
-    summary: `${email} signed in to ${tenant.name} at signup`,
+    summary: `${email} signed in to ${tenant.name} at signup${google ? " with Google" : ""}`,
     tenantId: tenant.id,
     actor: account,
   });
