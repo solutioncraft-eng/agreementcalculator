@@ -32,7 +32,7 @@ The Calculator multiplies each item by the matching environment figure: a $4 per
 Each offering has an **Offering name**, a **One-line description** shown in the Calculator, an ordering, and either:
 
 - **Standalone** — it carries only the items you tick under *Which COGS items does it carry?*; or
-- **Builds on** another offering — it inherits every item its parent carries and adds the items you tick. The inherited items are priced with the main lever; the added items are priced with the add-on multiplier or add-on markup.
+- **Builds on** another offering — it inherits every item its parent carries and adds the items you tick. Inherited items appear in the checklist greyed out and marked *Inherited from …*; only the items the parent does not already carry can be ticked. The inherited items are priced with the main lever; the added items are priced with the add-on multiplier or add-on markup.
 
 An offering with no items of its own is allowed: it sells its parent's stack under another name and price point. The editor shows each offering's *own* and *inherited* item counts, and each item shows which offerings carry it.
 

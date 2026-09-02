@@ -750,6 +750,21 @@ function TierForm({
   );
   const [addingItem, setAddingItem] = useState(false);
   const name = tier?.label ?? "this offering";
+  const parentLabel = tiers.find((candidate) => candidate.key === parentKey)?.label ?? parentKey;
+  // Items reached through the chosen parent chain arrive with it, so they are
+  // shown as inherited rather than offered for ticking.
+  const inheritedKeys = parentKey ? chainOf(tiers, parentKey).map((member) => member.key) : [];
+  const inheritedBy = (item: ItemView) => inheritedKeys.some((key) => item.tierKeys.includes(key));
+  const [ticked, setTicked] = useState<Set<string>>(
+    () => new Set(tier ? items.filter((item) => item.tierKeys.includes(tier.key)).map((item) => item.id) : []),
+  );
+  const toggle = (id: string, on: boolean) =>
+    setTicked((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
 
   return (
     <>
@@ -792,31 +807,38 @@ function TierForm({
             </button>
           ) : null}
         </div>
-        {parentKey === "" ? (
-          <div className="md:col-span-4 border-t border-mist pt-3">
-            <input type="hidden" name="chooseItems" value="1" />
-            <p className="label">Which COGS items does it carry?</p>
-            <p className="mt-1 text-[13px] text-slate">
-              Standalone means nothing is inherited, so {name} costs what you tick here — saved with the
-              offering.
+        <div className="md:col-span-4 border-t border-mist pt-3">
+          <input type="hidden" name="chooseItems" value="1" />
+          <p className="label">{parentKey ? `Which COGS items does it add on top of ${parentLabel}?` : "Which COGS items does it carry?"}</p>
+          <p className="mt-1 text-[13px] text-slate">
+            {parentKey
+              ? `Everything ${parentLabel} carries comes with it and is priced with the main lever — tick only what ${name} adds, priced with the add-on multiplier. Saved with the offering.`
+              : `Standalone means nothing is inherited, so ${name} costs what you tick here — saved with the offering.`}
+          </p>
+          {items.length === 0 ? (
+            <p className="mt-2 text-[13px] text-orange-dark">
+              This draft has no COGS items yet — add the first one below.
             </p>
-            {items.length === 0 ? (
-              <p className="mt-2 text-[13px] text-orange-dark">
-                This draft has no COGS items yet — add the first one below.
-              </p>
-            ) : (
-              <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {items.map((item) => (
+          ) : (
+            <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {items.map((item) => {
+                const inherited = inheritedBy(item);
+                return (
                   <label
                     key={item.id}
-                    className="flex items-start gap-2 rounded-brand border border-steel px-3 py-2 text-[13px]"
+                    className={clsx(
+                      "flex items-start gap-2 rounded-brand border px-3 py-2 text-[13px]",
+                      inherited ? "border-mist bg-paper text-slate" : "border-steel",
+                    )}
                   >
                     <input
                       type="checkbox"
                       name="itemIds"
                       value={item.id}
-                      defaultChecked={tier ? item.tierKeys.includes(tier.key) : false}
-                      className="mt-[3px] h-4 w-4 accent-orange"
+                      checked={inherited || ticked.has(item.id)}
+                      onChange={(event) => toggle(item.id, event.target.checked)}
+                      disabled={inherited}
+                      className="mt-[3px] h-4 w-4 accent-orange disabled:opacity-60"
                     />
                     <span>
                       {item.label}
@@ -824,11 +846,17 @@ function TierForm({
                         {money(item.unitCost)}/{item.unit === "FLAT" ? "mo" : item.unit.toLowerCase()}
                         {item.active ? "" : " · inactive"}
                       </span>
+                      {inherited ? (
+                        <span className="block font-display text-[10px] uppercase tracking-eyebrow text-slate">
+                          Inherited from {parentLabel}
+                        </span>
+                      ) : null}
                     </span>
                   </label>
-                ))}
-              </div>
-            )}
+                );
+              })}
+            </div>
+          )}
             <button
               type="button"
               className="btn-ghost btn-sm mt-3"
@@ -837,9 +865,8 @@ function TierForm({
               {addingItem ? "Never mind the new item" : "Need a COGS item that is not listed?"}
             </button>
           </div>
-        ) : null}
       </form>
-      {parentKey === "" && addingItem ? (
+      {addingItem ? (
         <div className="mt-3 rounded-brand border border-steel bg-paper p-3">
           <p className="label">New COGS item</p>
           <p className="mt-1 text-[13px] text-slate">
