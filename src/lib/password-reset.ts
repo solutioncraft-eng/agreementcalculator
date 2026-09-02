@@ -3,6 +3,12 @@ import { createHash, randomBytes } from "node:crypto";
 /** How long a reset link stays usable. */
 export const RESET_TTL_MINUTES = 60;
 
+/**
+ * How long a welcome link stays usable. A person who has just been invited may
+ * not open the email for days, so it lives far longer than a reset link.
+ */
+export const WELCOME_TTL_MINUTES = 7 * 24 * 60;
+
 /** Links a person may ask for inside {@link RESET_WINDOW_MINUTES}. */
 export const RESET_MAX_REQUESTS = 5;
 export const RESET_WINDOW_MINUTES = 15;
@@ -22,8 +28,8 @@ export function hashResetToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
-export function resetExpiry(now: Date = new Date()): Date {
-  return new Date(now.getTime() + RESET_TTL_MINUTES * 60_000);
+export function resetExpiry(now: Date = new Date(), ttlMinutes = RESET_TTL_MINUTES): Date {
+  return new Date(now.getTime() + ttlMinutes * 60_000);
 }
 
 export function resetWindowStart(now: Date = new Date()): Date {

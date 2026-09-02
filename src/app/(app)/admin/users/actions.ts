@@ -10,6 +10,7 @@ import {
   handoverMessage,
   issueTemporaryPassword,
   temporaryPassword,
+  welcomeMail,
 } from "@/lib/credentials";
 import { appUrl, sendMail } from "@/lib/email";
 
@@ -73,17 +74,23 @@ export async function inviteMember(_prev: UserState, formData: FormData): Promis
     actor: admin,
   });
 
-  const mailed = await sendMail({
-    to: [email],
-    subject: `[${tenant.name}] Your Agreement Calculator account`,
-    heading: password ? "Your account is ready" : `You now have access to ${tenant.name}`,
-    lines: [
-      `${admin.name} gave you ${role} access to ${tenant.name}.`,
-      ...(password ? [`Temporary password: ${password}`, "Change it after your first sign-in."] : []),
-    ],
-    actionLabel: "Sign in",
-    actionUrl: appUrl("/login"),
-  });
+  const mailed = await sendMail(
+    password
+      ? await welcomeMail({
+          userId: account.id,
+          email,
+          tenantName: tenant.name,
+          intro: `${admin.name} gave you ${role} access to ${tenant.name}.`,
+        })
+      : {
+          to: [email],
+          subject: `[${tenant.name}] Your Agreement Calculator account`,
+          heading: `You now have access to ${tenant.name}`,
+          lines: [`${admin.name} gave you ${role} access to ${tenant.name}.`],
+          actionLabel: "Sign in",
+          actionUrl: appUrl("/login"),
+        },
+  );
 
   revalidatePath("/admin/users");
   if (mailed.sent) return { ok: `${email} added — an email is on its way.` };
@@ -164,15 +171,13 @@ export async function removeMember(_prev: UserState, formData: FormData): Promis
   return { ok: `${membership.user.email} no longer has access to ${tenant.name}.` };
 }
 
-/** Issues a fresh temporary password and mails the sign-in details again. */
+/** Mails a fresh welcome link; a temporary password only when the email cannot go out. */
 export async function resendWelcome(_prev: UserState, formData: FormData): Promise<UserState> {
   const { user: admin, tenant } = await requireRole("ADMIN");
   const userId = String(formData.get("userId") ?? "");
   const found = await memberOrError(tenant.id, userId);
   if ("error" in found) return { error: found.error };
   const { user } = found.membership;
-
-  const password = await issueTemporaryPassword(userId);
 
   await audit({
     action: "WELCOME_EMAIL_RESENT",
@@ -183,23 +188,20 @@ export async function resendWelcome(_prev: UserState, formData: FormData): Promi
     actor: admin,
   });
 
-  const mailed = await sendMail({
-    to: [user.email],
-    subject: `[${tenant.name}] Your Agreement Calculator account`,
-    heading: "Your account is ready",
-    lines: [
-      `${admin.name} set up your access to ${tenant.name} as ${found.membership.role}.`,
-      `Temporary password: ${password}`,
-      "Change it after your first sign-in.",
-    ],
-    actionLabel: "Sign in",
-    actionUrl: appUrl("/login"),
-  });
+  const mailed = await sendMail(
+    await welcomeMail({
+      userId: user.id,
+      email: user.email,
+      tenantName: tenant.name,
+      intro: `${admin.name} set up your access to ${tenant.name} as ${found.membership.role}.`,
+    }),
+  );
 
   revalidatePath("/admin/users");
-  return mailed.sent
-    ? { ok: `Welcome email resent to ${user.email} with a new temporary password.` }
-    : { ok: handoverMessage(mailed, user.email), tempPassword: password };
+  if (mailed.sent) return { ok: `Welcome email resent to ${user.email}.` };
+  // With no email to carry the link, a temporary password is the only way in.
+  const password = await issueTemporaryPassword(userId);
+  return { ok: handoverMessage(mailed, user.email), tempPassword: password };
 }
 
 export async function resetPassword(_prev: UserState, formData: FormData): Promise<UserState> {

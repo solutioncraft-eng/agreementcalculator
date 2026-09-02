@@ -6,6 +6,7 @@ import type { PricingModel } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { requireSuperAdmin } from "@/lib/auth";
+import { welcomeMail } from "@/lib/credentials";
 import { sendMail } from "@/lib/email";
 import { provisionWorkspace } from "@/lib/provisioning";
 import { isValidSlug, slugFromName, tenantUrl } from "@/lib/tenant";
@@ -58,7 +59,7 @@ export async function createTenant(_prev: SuperState, formData: FormData): Promi
   }
 
   const model: PricingModel = pricingModel;
-  const { tenant, temporaryPassword } = await provisionWorkspace({
+  const { tenant, admin, temporaryPassword } = await provisionWorkspace({
     name: parsed.data.name,
     slug,
     pricingModel: model,
@@ -78,21 +79,34 @@ export async function createTenant(_prev: SuperState, formData: FormData): Promi
     actor: operator,
   });
 
-  const mailed = await sendMail({
-    to: [adminEmail],
-    subject: `Your ${tenant.name} workspace is ready`,
-    heading: `${tenant.name} is set up on Agreement Calculator`,
-    lines: [
-      `You are the administrator of ${tenant.name}.`,
-      `Pricing model: ${PRICING_MODELS[model].label}.`,
-      ...(temporaryPassword
-        ? [`Temporary password: ${temporaryPassword}`, "You will be asked to change it when you sign in."]
-        : []),
-      "Start by reviewing your COGS items and publishing your first pricing version — quotes cannot be produced until one is published.",
-    ],
-    actionLabel: "Sign in",
-    actionUrl: tenantUrl(slug, "/login"),
-  });
+  const lines = [
+    `You are the administrator of ${tenant.name}.`,
+    `Pricing model: ${PRICING_MODELS[model].label}.`,
+    "Start by reviewing your COGS items and publishing your first pricing version — quotes cannot be produced until one is published.",
+  ];
+  const mailed = await sendMail(
+    temporaryPassword
+      ? {
+          ...(await welcomeMail({
+            userId: admin.id,
+            email: adminEmail,
+            tenantName: tenant.name,
+            intro: lines[0],
+            lines: lines.slice(1),
+            base: (path) => tenantUrl(slug, path),
+          })),
+          subject: `Your ${tenant.name} workspace is ready`,
+          heading: `${tenant.name} is set up on Agreement Calculator`,
+        }
+      : {
+          to: [adminEmail],
+          subject: `Your ${tenant.name} workspace is ready`,
+          heading: `${tenant.name} is set up on Agreement Calculator`,
+          lines,
+          actionLabel: "Sign in",
+          actionUrl: tenantUrl(slug, "/login"),
+        },
+  );
 
   revalidatePath("/super");
   if (mailed.sent) return { ok: `${tenant.name} created — ${adminEmail} has been invited.` };
