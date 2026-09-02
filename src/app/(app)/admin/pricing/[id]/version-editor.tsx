@@ -42,6 +42,7 @@ interface SettingField {
   name: string;
   label: string;
   suffix: string;
+  hint: string;
   step: string;
 }
 
@@ -256,13 +257,26 @@ export function VersionEditor({
         </p>
         <form action={modelAction} className="mt-4 grid gap-4 md:grid-cols-3">
           <input type="hidden" name="versionId" value={version.id} />
-          <Field name="label" label="Version label" defaultValue={version.label} disabled={!editable} />
-          <Field name="costBasis" label="Cost basis" defaultValue={version.costBasis} disabled={!editable} />
+          <Field
+            name="label"
+            label="Version label"
+            hint="How this pricing schedule is named in the version list, on quotes and in the audit trail. Something like a year and sequence, e.g. 2026.1, so anyone can tell which schedule a quote was priced on."
+            defaultValue={version.label}
+            disabled={!editable}
+          />
+          <Field
+            name="costBasis"
+            label="Cost basis"
+            hint="When the COGS costs in this version were taken from your vendors, e.g. Q3 2026. Purely descriptive; it reminds reviewers how fresh the tool costs are."
+            defaultValue={version.costBasis}
+            disabled={!editable}
+          />
           {fields.map((field) => (
             <Field
               key={field.name}
               name={field.name}
               label={`${field.label} ${field.suffix}`}
+              hint={field.hint}
               type="number"
               step={field.step}
               defaultValue={version.settings[field.name]}
@@ -272,6 +286,7 @@ export function VersionEditor({
           <div className="md:col-span-2">
             <label className="label" htmlFor="notes">
               Notes
+              <Hint text="Free-form context for whoever publishes or audits this version: what changed and why. Shown only here." />
             </label>
             <textarea
               id="notes"
@@ -1098,9 +1113,30 @@ function ItemForm({
   );
 }
 
+function Hint({ text }: { text: string }) {
+  return (
+    <span className="group relative ml-1 inline-flex align-middle">
+      <span
+        tabIndex={0}
+        aria-label={text}
+        className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-slate/40 text-[10px] font-semibold leading-none text-slate group-hover:border-navy group-hover:text-navy"
+      >
+        ?
+      </span>
+      <span
+        role="tooltip"
+        className="pointer-events-none invisible absolute bottom-full left-1/2 z-20 mb-2 w-72 -translate-x-1/2 rounded-md bg-navy px-3 py-2 text-[12px] font-normal normal-case leading-snug tracking-normal text-white opacity-0 shadow-lg transition-opacity group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"
+      >
+        {text}
+      </span>
+    </span>
+  );
+}
+
 function Field({
   name,
   label,
+  hint,
   type = "text",
   step,
   defaultValue,
@@ -1109,6 +1145,7 @@ function Field({
 }: {
   name: string;
   label: string;
+  hint?: string;
   type?: string;
   step?: string;
   defaultValue?: string | number | null;
@@ -1119,6 +1156,7 @@ function Field({
     <div>
       <label className="label" htmlFor={`f-${name}`}>
         {label}
+        {hint ? <Hint text={hint} /> : null}
       </label>
       <input
         id={`f-${name}`}
