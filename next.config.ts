@@ -12,6 +12,7 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["@react-pdf/renderer"],
   outputFileTracingIncludes: {
     "/api/export": ["./node_modules/pdfkit/js/standard-fonts/**", "./public/infinit-logo.png"],
+    "/help/changelog": ["./CHANGELOG.md"],
   },
 };
 
