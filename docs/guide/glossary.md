@@ -18,6 +18,7 @@ order: 140
 | **Bundle discount** | A named percentage off the agreement rate for clients taking more than one service. Never sells below cost. |
 | **COGS item** | Cost of goods sold: a tool or licence you pay for, with a unit cost and unit basis. |
 | **Cost basis** | A short description on a pricing version of where its costs came from; printed on PDFs. |
+| **Co-managed** | An offering delivered alongside the client's own IT staff. Its base tools are priced with the version's co-managed labor multiplier or co-managed markup instead of the fully managed lever; offerings built on it are co-managed too. |
 | **Cost floor** | The lowest a rate can go: tool + imputed labor on cost-plus, raw tool cost on markup. |
 | **Cost-plus** | The pricing model that solves the rate from cost and a target service gross margin. |
 | **Draft** | An editable pricing version that the Calculator does not yet use. |
@@ -32,6 +33,7 @@ order: 140
 | **Membership** | A person's place in a workspace, carrying their role there. |
 | **Offering** | An agreement product you sell, built from COGS items; may stand alone or build on a parent offering. |
 | **Operator** | Someone who runs the Agreement Calculator service and manages workspaces from outside them. |
+| **Per-offering floor** | A per-user floor set on one offering — lower than the version's, or 0 for none — so a co-managed offering is not lifted to a fully managed floor. The cost floor still applies. |
 | **Per-user floor** | The minimum per-user rate; the floor is charged when the calculated rate is lower. |
 | **Pricing model** | Cost-plus or markup multiple; one per workspace. |
 | **Pricing version** | A snapshot of settings, offerings, COGS items and bundles. Draft, published or archived. |

@@ -14,9 +14,9 @@ Whichever model you use:
 
 - **Tool cost** is the only real dollar figure. It is the sum of the active COGS items an offering carries, each multiplied by the environment (users, devices, locations, or flat).
 - **Offerings** can build on one another. A child offering includes everything its parent carries; the items it *adds* are priced with the add-on setting rather than the main lever.
-- A standalone offering can be marked **co-managed** — delivered alongside the client's own IT staff. Its tools, and those of every offering built on it, are priced with the version's co-managed lever instead of the main one, because the imputed labor (or markup) a fully managed agreement carries is too high when the client's team does most of the work.
+- A standalone offering can be marked **co-managed** — delivered alongside the client's own IT staff. Its tools, and those of every offering built on it, are priced with the version's co-managed lever instead of the main one. See [Co-managed offerings](#co-managed-offerings) below.
 - Any offering can carry an optional **flat rate**: a price per user, per device, per location and/or a flat amount per month. When set, the sum replaces the model's formula as the offering's standard rate. The cost floor, per-user floor and bundle discounts still apply underneath, and a flat rate below the cost floor is flagged for review with the floor charged.
-- The **per-user floor** is the lowest per-user rate the workspace will sell. If a calculated rate lands below it, the floor is charged and the quote is flagged. An offering can carry a **per-user floor of its own** — lower than the version's, or 0 for no floor at all — which is typical for a co-managed offering whose seats cost far less to support. The COGS cost floor still applies to it.
+- The **per-user floor** is the lowest per-user rate the workspace will sell. If a calculated rate lands below it, the floor is charged and the quote is flagged. An offering can carry a **per-user floor of its own** — see [Per-offering floor](#per-offering-floor) below.
 - **Bundle discounts** come off the sell rate, but never below cost. A discount that would breach cost is capped and the quote is flagged.
 - The Calculator reports the **achieved gross margin** for each offering so you can see the outcome of any lever setting.
 
@@ -77,6 +77,38 @@ Tool cost $40/user, default markup 2.5× → **$100/user**, of which 40% is tool
 
 Markup below default, markup below minimum, discount over maximum, per-user floor changed, an offering below the floor, the floor override, a bundle discount capped at cost, or a flat rate below the cost floor.
 :::
+
+## Co-managed offerings
+
+A **fully managed** agreement assumes your team does all the work: on cost-plus every dollar of tool cost carries the full imputed labor multiple; on markup the Calculator's markup covers your labor and margin. A **co-managed** agreement is delivered alongside the client's own IT staff, who handle most of the day-to-day. Pricing its tool stack the fully managed way overstates the labor you will actually supply and produces a rate the client will not pay.
+
+Marking a standalone offering **Co-managed** (in its offering form under **Settings → Pricing**) changes three things:
+
+| What | Fully managed | Co-managed |
+| --- | --- | --- |
+| **Base tools — cost-plus** | tool × (1 + *labor multiplier*), then ÷ (1 − SGM) | tool × (1 + *co-managed labor multiplier*), then ÷ (1 − SGM) |
+| **Base tools — markup** | tool × the Calculator's markup | tool × *co-managed markup* (fixed per version) |
+| **Cost floor** | tool + full imputed labor (cost-plus) or raw tool (markup) | tool + co-managed labor (cost-plus) or raw tool (markup) |
+
+Everything else is shared. Add-on items still use the add-on multiplier or add-on markup, the SGM slider still applies on cost-plus, bundle discounts still cap at cost, and the same review triggers apply. Offerings that **build on** a co-managed offering are co-managed too: the whole chain follows its root, so you cannot mix delivery types inside one chain. The Calculator, quotes and both PDFs label a co-managed offering as such.
+
+**Setting the co-managed lever.** Start from how much of the work the client's team actually takes. On cost-plus, if a fully managed seat carries 3.1× tool cost in labor and the client covers roughly two-thirds of that effort, a co-managed labor multiplier around 1.0× is reasonable; the default is 1.0×. On markup, set the co-managed markup to the multiple you sell co-managed at — it is fixed per version and the account manager cannot move it in the Calculator.
+
+**Combining with a flat rate.** Where your co-managed price is set by the market rather than by cost, put a flat rate on the offering (per user, device, location and/or per month). The co-managed lever then only determines the cost floor the flat rate is checked against.
+
+### Per-offering floor
+
+The version's **Minimum per-user floor** is written for a fully managed seat, so a co-managed offering that correctly prices at $40/user would be lifted to a $100 floor and flagged on every quote. Each offering therefore has its own **Per-user floor** field in the offering form:
+
+| Value | Effect |
+| --- | --- |
+| *blank* | The offering follows the quote's per-user floor (the version minimum, or whatever the account manager sets in the Calculator). |
+| a number | The offering is held to this floor instead — typically lower than the version's. The Calculator's floor field does not affect it. |
+| `0` | No per-user floor for this offering. |
+
+Whatever the per-user floor, the **COGS cost floor** still applies: a bundle discount never takes the rate below tool (+ co-managed labor) cost, and a flat rate below it is charged at cost and flagged. An offering held to its own floor is only flagged *below floor* against that floor, and only when it is the offering being quoted.
+
+Although the field is aimed at co-managed offerings, any offering can use it — for example a lightweight add-on agreement whose seats cost little to support.
 
 ## Changing the settings
 

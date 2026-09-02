@@ -36,7 +36,7 @@ The section is titled **Markup on tool cost**. The rate is `agreementRate = tool
 
 Under **Pricing floors**:
 
-- **Per-user floor** — the lowest per-user rate the workspace will sell at. It starts at the workspace minimum. If a tier's calculated rate falls below the floor, the floor is charged instead and the quote is flagged. Changing the floor itself is also flagged.
+- **Per-user floor** — the lowest per-user rate the workspace will sell at. It starts at the workspace minimum. If a tier's calculated rate falls below the floor, the floor is charged instead and the quote is flagged. Changing the floor itself is also flagged. An offering with a [floor of its own](/help/guide/pricing-models#per-offering-floor) (typically a co-managed one) ignores this field and is held to its own floor, or to none.
 - **Add-on multiplier** (cost-plus) or **Add-on markup** (markup) — how tools that an offering *adds* on top of its parent are priced. Only editable on cost-plus workspaces; changing it is flagged.
 - **Show the calculated rate even when it falls below the floor** — a checkbox that turns the floor off so the true below-floor rate is used. This is always flagged.
 

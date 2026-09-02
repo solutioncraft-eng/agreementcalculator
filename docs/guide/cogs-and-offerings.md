@@ -34,6 +34,12 @@ Each offering has an **Offering name**, a **One-line description** shown in the 
 - **Standalone** — it carries only the items you tick under *Which COGS items does it carry?*; or
 - **Builds on** another offering — it inherits every item its parent carries and adds the items you tick. Inherited items appear in the checklist greyed out and marked *Inherited from …*; only the items the parent does not already carry can be ticked. The inherited items are priced with the main lever; the added items are priced with the add-on multiplier or add-on markup.
 
+An offering also carries three pricing options — see [Pricing models](/help/guide/pricing-models#co-managed-offerings) for how each affects the rate:
+
+- **Co-managed** (standalone offerings only) — delivered alongside the client's own IT staff. The offering, and every offering built on it, is priced with the version's co-managed lever instead of the fully managed one.
+- **Flat rate** — an optional price per user, per device, per location and/or per month that replaces the formula.
+- **Per-user floor** — leave blank to follow the version's floor, enter a lower number, or 0 for no per-user floor. Typical for a co-managed offering.
+
 An offering with no items of its own is allowed: it sells its parent's stack under another name and price point. The editor shows each offering's *own* and *inherited* item counts, and each item shows which offerings carry it.
 
 ## Offering names matter
