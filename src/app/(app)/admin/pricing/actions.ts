@@ -74,6 +74,7 @@ export async function createDraft(): Promise<void> {
               overridePerDevice: tier.overridePerDevice,
               overridePerLocation: tier.overridePerLocation,
               overrideFlat: tier.overrideFlat,
+              perUserFloor: tier.perUserFloor,
             }))
           : SEED_SERVICE_TIERS.map((tier, index) => ({ ...tier, sortOrder: index }))
         ).map((tier) => ({ ...tier, tenantId: tenant.id })),
@@ -471,6 +472,7 @@ export async function saveServiceTier(_prev: AdminState, formData: FormData): Pr
     overridePerDevice: formData.get("overridePerDevice") ?? undefined,
     overridePerLocation: formData.get("overridePerLocation") ?? undefined,
     overrideFlat: formData.get("overrideFlat") ?? undefined,
+    perUserFloor: formData.get("perUserFloor") ?? undefined,
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the offering." };
   const data = parsed.data;
@@ -482,6 +484,7 @@ export async function saveServiceTier(_prev: AdminState, formData: FormData): Pr
     overridePerDevice: data.overridePerDevice || null,
     overridePerLocation: data.overridePerLocation || null,
     overrideFlat: data.overrideFlat || null,
+    perUserFloor: data.perUserFloor,
   };
   // The form only submits memberships when it showed the item checklist, so an
   // ordinary rename never clears the offering's stack.
@@ -528,6 +531,7 @@ export async function saveServiceTier(_prev: AdminState, formData: FormData): Pr
         overridePerDevice: before.overridePerDevice,
         overridePerLocation: before.overridePerLocation,
         overrideFlat: before.overrideFlat,
+        perUserFloor: before.perUserFloor,
         ...(change ? { ownItems: change.before } : {}),
       },
       after: { ...data, parentKey, ...pricing, ...(change ? { ownItems: change.after } : {}) },

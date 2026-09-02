@@ -54,6 +54,8 @@ interface TierView {
   parentKey: string | null;
   coManaged: boolean;
   override: TierOverrideView;
+  /** Own per-user floor; null follows the version floor, 0 means none. */
+  perUserFloor: number | null;
 }
 
 /** Flat-rate override components as stored; null means the component is unset. */
@@ -352,6 +354,11 @@ export function VersionEditor({
                     <p className="font-display text-[11px] uppercase tracking-eyebrow text-slate">
                       {chainOf(tiers, tier.key)[0]?.coManaged ? "Co-managed" : "Fully managed"}
                       {hasOverride(tier.override) ? ` · flat rate ${describeOverride(tier.override)}` : ""}
+              {tier.perUserFloor === null
+                ? ""
+                : tier.perUserFloor === 0
+                  ? " · no per-user floor"
+                  : ` · floor ${money(tier.perUserFloor)}/user`}
                     </p>
                     <p className="font-mono text-[11px] text-slate">{tier.key}</p>
                     <p className="mt-1 font-mono text-[11px] text-slate">
@@ -918,6 +925,21 @@ function TierForm({
                 placeholder="—"
               />
             ))}
+          </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-4">
+            <Field
+              name="perUserFloor"
+              label="Per-user floor ($)"
+              hint="The lowest monthly rate per user this offering will sell for. Leave blank to follow the version's per-user floor; enter a lower number for a floor of its own, or 0 to sell with no per-user floor at all — useful for co-managed offerings whose seats cost far less to support. The COGS cost floor always applies regardless."
+              type="number"
+              step="1"
+              defaultValue={tier?.perUserFloor ?? ""}
+              placeholder="Version floor"
+            />
+            <p className="self-end pb-2 text-[13px] text-slate sm:col-span-3">
+              Blank follows the version floor; 0 removes the floor for {name}. The COGS cost floor still
+              applies.
+            </p>
           </div>
         </div>
         <div className="md:col-span-4 border-t border-mist pt-3">

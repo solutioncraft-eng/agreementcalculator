@@ -293,6 +293,10 @@ model ServiceTier {
   overridePerLocation Decimal? @db.Decimal(10, 4)
   overrideFlat        Decimal? @db.Decimal(10, 4)
 
+  /// Per-user floor for this offering alone. Null uses the quote's floor; 0
+  /// sells with no floor at all.
+  perUserFloor Decimal? @db.Decimal(10, 4)
+
   @@unique([versionId, key])
   @@index([versionId])
   @@index([tenantId])

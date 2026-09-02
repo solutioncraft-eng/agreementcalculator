@@ -66,7 +66,7 @@ function calculate(
       message: `Minimum per-user floor changed from ${money(s.minPerUserFloor)} to ${money(inputs.perUserFloor)}`,
     });
   }
-  triggers.push(...belowFloorTriggers(tiers, inputs), ...overrideTriggers(tiers));
+  triggers.push(...belowFloorTriggers(tiers), ...overrideTriggers(tiers));
   if (inputs.floorOverride) {
     triggers.push({ code: "FLOOR_OVERRIDE", message: "Floor overridden — actual below-floor rate in use" });
   }
