@@ -41,9 +41,16 @@ With `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` set, the sign-in page offers 
 alongside the password form. Google answers exactly one question — which verified email address is at the
 keyboard — and the account is then this app's own: an existing account is matched by that address, `googleSub`
 is stored so a later change of address still lands on the same account, and a temporary password waiting to be
-changed is considered settled. Google never creates an account, because an account here also decides workspace
-membership; someone with no account is told to ask their administrator, and a deactivated one is refused with
-the same wording as an unknown one.
+changed is considered settled. A deactivated account is still refused: Google is not a way around a decision
+somebody made.
+
+An address with no account here has proved who it belongs to but not which company it prices for, so it does
+not get an account outright: the verified identity is sealed into a short-lived http-only cookie and the person
+lands on `/signup`, where naming the company and pricing model creates the workspace with them as its
+administrator. The form cannot alter that identity — the address and `googleSub` are read from the cookie, not
+from the fields — no password is asked for, and the cookie is spent as soon as the workspace exists. Google
+sign-in still never grants membership of a workspace that already exists; that stays an invitation from inside
+it.
 
 The handshake is authorization code with PKCE, state and nonce, all three kept in a short-lived http-only
 cookie scoped to `/api/auth/google`, and the id token is verified against Google's published keys before its

@@ -43,7 +43,15 @@ export function MarketingFooter() {
           Agreement Calculator · ${PRICE_PER_MONTH}/month per company · {TRIAL_DAYS}-day free trial, no card
           required
         </p>
-        <p className="font-mono text-[12px]">agreementcalculator.com</p>
+        <nav className="flex items-center gap-5">
+          <Link href="/privacy" className="hover:text-navy">
+            Privacy
+          </Link>
+          <Link href="/terms" className="hover:text-navy">
+            Terms
+          </Link>
+          <span className="font-mono text-[12px]">agreementcalculator.com</span>
+        </nav>
       </div>
     </footer>
   );

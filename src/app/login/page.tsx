@@ -13,8 +13,7 @@ const GOOGLE_PROBLEMS: Record<string, string | undefined> = {
   denied: "Google sign-in was cancelled.",
   failed: "Google sign-in could not be completed. Try again, or use your password.",
   domain: "That Google account is not on an email domain allowed to sign in here.",
-  nouser:
-    "No Agreement Calculator account uses that Google address. Ask your workspace administrator for an invitation.",
+  nouser: "That account has been deactivated. Ask your workspace administrator to restore it.",
 };
 
 export default async function LoginPage({

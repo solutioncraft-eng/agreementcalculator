@@ -5,10 +5,13 @@ import { audit } from "@/lib/audit";
 import { completeSignIn } from "@/lib/sign-in";
 import {
   GOOGLE_HANDSHAKE_COOKIE,
+  GOOGLE_SIGNUP_COOKIE,
+  GOOGLE_SIGNUP_TTL_SECONDS,
   domainAllowed,
   exchangeCode,
   googleConfig,
   openHandshake,
+  sealSignup,
   statesMatch,
 } from "@/lib/google";
 
@@ -54,11 +57,23 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const bySub = await prisma.user.findUnique({ where: { googleSub: identity.sub } });
   const user = bySub ?? (await prisma.user.findUnique({ where: { email: identity.email } }));
 
-  // Accounts are provisioned by an administrator or by signing a workspace up,
-  // so Google is a way in to an existing account, never a way to create one.
-  // A deactivated account is turned away with the same message as an unknown
-  // one, matching how password sign-in refuses to say which it was.
-  if (!user || !user.active) {
+  // Nobody here yet: Google has proved who they are, but not which company they
+  // are pricing for, so they carry that proof into workspace setup rather than
+  // being turned away.
+  if (!user) {
+    store.set(GOOGLE_SIGNUP_COOKIE, await sealSignup(identity), {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: GOOGLE_SIGNUP_TTL_SECONDS,
+    });
+    return NextResponse.redirect(new URL("/signup", origin));
+  }
+
+  // A deactivated account is a decision somebody made, and Google is not a way
+  // around it — nor a way to start a second workspace on the same address.
+  if (!user.active) {
     await audit({
       action: "LOGIN_FAILED",
       summary: `Google sign-in for ${identity.email} has no usable account`,

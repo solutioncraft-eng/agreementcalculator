@@ -21,6 +21,8 @@ export interface ProvisionInput {
     name: string;
     /** Chosen at signup. Absent when an operator invites the administrator. */
     password?: string;
+    /** Set when Google vouched for the address instead of a password. */
+    googleSub?: string;
   };
   /** Trial deadline, or null for a workspace with no deadline. */
   trialEndsAt: Date | null;
@@ -56,11 +58,13 @@ export interface Provisioned {
  */
 export async function provisionWorkspace(input: ProvisionInput): Promise<Provisioned> {
   const existing = await prisma.user.findUnique({ where: { email: input.admin.email } });
-  const temporaryPassword = existing || input.admin.password ? null : randomBytes(9).toString("base64url");
+  const generated = existing || input.admin.password ? null : randomBytes(9).toString("base64url");
   // Hashing is deliberately slow, so it happens before the transaction opens.
-  const passwordHash = existing
-    ? null
-    : await hashPassword(input.admin.password ?? (temporaryPassword as string));
+  const passwordHash = existing ? null : await hashPassword(input.admin.password ?? (generated as string));
+  // An account that came in through Google signs in through Google; the filler
+  // password is not something anyone needs to be told, or made to change.
+  const throughGoogle = Boolean(input.admin.googleSub);
+  const temporaryPassword = throughGoogle ? null : generated;
 
   const model: PricingModel = input.pricingModel;
   const { tenant, admin } = await prisma.$transaction(async (tx) => {
@@ -71,7 +75,8 @@ export async function provisionWorkspace(input: ProvisionInput): Promise<Provisi
           email: input.admin.email,
           name: input.admin.name,
           passwordHash: passwordHash as string,
-          mustReset: !input.admin.password,
+          googleSub: input.admin.googleSub ?? null,
+          mustReset: !input.admin.password && !throughGoogle,
         },
       }));
 

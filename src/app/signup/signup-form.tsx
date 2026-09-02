@@ -1,15 +1,22 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useState } from "react";
+import { GoogleMark } from "@/components/google-mark";
 import { slugFromName } from "@/lib/slug";
 import { signUp, type SignupState } from "./actions";
 
 export function SignupForm({
   models,
   rootDomain,
+  google,
+  googleStartUrl,
 }: {
   models: { key: string; label: string; summary: string }[];
   rootDomain: string;
+  /** The identity Google vouched for, when signup started there. */
+  google?: { email: string; name: string | null } | null;
+  googleStartUrl?: string;
 }) {
   const [state, action, pending] = useActionState<SignupState, FormData>(signUp, {});
   const [company, setCompany] = useState(state.values?.company ?? "");
@@ -19,6 +26,20 @@ export function SignupForm({
 
   return (
     <form action={action} className="space-y-5">
+      {googleStartUrl && !google ? (
+        <div>
+          <a href={googleStartUrl} className="btn-ghost w-full">
+            <GoogleMark />
+            Continue with Google
+          </a>
+          <div className="mt-5 flex items-center gap-3 text-[12px] uppercase tracking-eyebrow text-slate">
+            <span className="h-px flex-1 bg-mist" />
+            or
+            <span className="h-px flex-1 bg-mist" />
+          </div>
+        </div>
+      ) : null}
+
       <div>
         <label className="label" htmlFor="company">
           Company name
@@ -63,13 +84,16 @@ export function SignupForm({
             name="name"
             className="field mt-1"
             required
-            defaultValue={state.values?.name ?? ""}
+            defaultValue={state.values?.name ?? google?.name ?? ""}
           />
         </div>
         <div>
           <label className="label" htmlFor="email">
             Work email
           </label>
+          {/* The address Google vouched for is the account being created, so it
+              is shown rather than asked for — the server reads it from the
+              signed cookie either way. */}
           <input
             id="email"
             name="email"
@@ -77,26 +101,29 @@ export function SignupForm({
             autoComplete="username"
             className="field mt-1"
             required
-            defaultValue={state.values?.email ?? ""}
+            readOnly={Boolean(google)}
+            defaultValue={google?.email ?? state.values?.email ?? ""}
           />
         </div>
       </div>
 
-      <div>
-        <label className="label" htmlFor="password">
-          Password
-        </label>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          autoComplete="new-password"
-          minLength={12}
-          className="field mt-1"
-          required
-        />
-        <p className="mt-1 text-[12px] text-slate">At least 12 characters.</p>
-      </div>
+      {google ? null : (
+        <div>
+          <label className="label" htmlFor="password">
+            Password
+          </label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            autoComplete="new-password"
+            minLength={12}
+            className="field mt-1"
+            required
+          />
+          <p className="mt-1 text-[12px] text-slate">At least 12 characters.</p>
+        </div>
+      )}
 
       <fieldset>
         <legend className="label">Pricing model</legend>
@@ -134,11 +161,23 @@ export function SignupForm({
       ) : null}
 
       <button type="submit" className="btn-primary w-full" disabled={pending}>
-        {pending ? "Setting up your workspace…" : "Start free trial"}
+        {pending
+          ? "Setting up your workspace…"
+          : google
+            ? "Create workspace with Google"
+            : "Start free trial"}
       </button>
       <p className="text-[12px] text-slate">
         No card required. Your workspace opens with a draft pricing version — nothing is quotable until you
-        publish it.
+        publish it. By setting it up you agree to our{" "}
+        <Link href="/terms" className="font-medium text-orange">
+          terms
+        </Link>{" "}
+        and{" "}
+        <Link href="/privacy" className="font-medium text-orange">
+          privacy policy
+        </Link>
+        .
       </p>
     </form>
   );

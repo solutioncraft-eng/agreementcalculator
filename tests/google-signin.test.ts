@@ -7,7 +7,9 @@ import {
   domainAllowed,
   newHandshake,
   openHandshake,
+  openSignup,
   sealHandshake,
+  sealSignup,
   statesMatch,
 } from "../src/lib/google";
 
@@ -64,6 +66,30 @@ test("a sealed handshake survives the round trip and nothing else opens", async 
     "utf8",
   ).toString("base64url");
   assert.equal(await openHandshake(`${header}.${forged}.${signature}`), null);
+});
+
+test("a pending Google signup keeps the identity the callback verified", async () => {
+  const identity = { sub: "google-123", email: "new@acme.com", name: "New Person" };
+  const sealed = await sealSignup(identity);
+  assert.deepEqual(await openSignup(sealed), identity);
+
+  assert.equal(await openSignup("not-a-token"), null);
+  // The form must not be able to nominate a different address to administer.
+  const [header, , signature] = sealed.split(".");
+  const forged = Buffer.from(
+    JSON.stringify({ use: "signup", sub: identity.sub, email: "attacker@acme.com" }),
+    "utf8",
+  ).toString("base64url");
+  assert.equal(await openSignup(`${header}.${forged}.${signature}`), null);
+});
+
+test("a handshake token is not accepted as a pending signup, or the reverse", async () => {
+  const handshake = newHandshake();
+  assert.equal(await openSignup(await sealHandshake(handshake)), null);
+  assert.equal(
+    await openHandshake(await sealSignup({ sub: "s", email: "a@b.com", name: null })),
+    null,
+  );
 });
 
 test("state is compared whole", () => {
