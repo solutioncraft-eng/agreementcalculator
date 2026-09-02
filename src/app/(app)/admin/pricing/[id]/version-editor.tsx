@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import clsx from "clsx";
 import { money } from "@/lib/pricing/engine";
 import { DEFAULT_INPUTS } from "@/lib/pricing/defaults";
@@ -218,9 +218,14 @@ export function VersionEditor({
   const [pickingTier, setPickingTier] = useState<string | null>(null);
   // The add form is open only when asked for, or when there is nothing to list yet.
   const [addingTier, setAddingTier] = useState(tiers.length === 0);
+  const handledTierState = useRef(tierState);
   useEffect(() => {
-    if (tierState.ok && editingTier === null && tiers.length > 0) setAddingTier(false);
-  }, [tierState, editingTier, tiers.length]);
+    if (handledTierState.current === tierState) return;
+    handledTierState.current = tierState;
+    if (!tierState.ok) return;
+    setEditingTier(null);
+    if (tiers.length > 0) setAddingTier(false);
+  }, [tierState, tiers.length]);
   const tierLabel = (key: string) => tiers.find((tier) => tier.key === key)?.label ?? key;
   const costing = costings(tiers, items);
 
