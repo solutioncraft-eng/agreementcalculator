@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import type { PricingVersion, QuoteRequest, QuoteReview, User } from "@prisma/client";
-import { achievedSgmPct, money, moneyRounded, standardRateLabel } from "@/lib/pricing/engine";
+import { achievedSgmPct, forTier, money, moneyRounded, standardRateLabel } from "@/lib/pricing/engine";
 import { calculate } from "@/lib/pricing/models";
 import { getConfigForVersion } from "@/lib/pricing/config";
 import type { TenantDb } from "@/lib/db";
@@ -34,7 +34,7 @@ export type QuoteWithRelations = QuoteRequest & {
 export async function QuoteDetail({ quote, db }: { quote: QuoteWithRelations; db: TenantDb }) {
   const config = await getConfigForVersion(db, quote.pricingVersionId);
   const inputs = quoteInputs(quote);
-  const result = config ? calculate(config, inputs) : null;
+  const result = config ? forTier(calculate(config, inputs), quote.requestedTierKey) : null;
   const tier = result?.tiers.find((t) => t.key === quote.requestedTierKey);
   const requested = storedTier(quote);
   const tierLabel = quoteTierName(quote);

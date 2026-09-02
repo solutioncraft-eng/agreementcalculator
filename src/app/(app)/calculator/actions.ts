@@ -6,6 +6,7 @@ import { audit } from "@/lib/audit";
 import { requireTenant } from "@/lib/auth";
 import { appUrl, sendMail } from "@/lib/email";
 import { getActiveConfig } from "@/lib/pricing/config";
+import { forTier } from "@/lib/pricing/engine";
 import { calculate } from "@/lib/pricing/models";
 import { tierRatesFrom } from "@/lib/quotes";
 import { submitQuoteSchema } from "@/lib/schemas";
@@ -53,7 +54,7 @@ export async function submitForReview(_prev: SubmitState, formData: FormData): P
   if (!config) return { error: "No published pricing version — ask an administrator to publish one." };
 
   const { clientName, notes, requestedTierKey, inputs } = parsed.data;
-  const result = calculate(config, inputs);
+  const result = forTier(calculate(config, inputs), requestedTierKey);
   if (!result.needsApproval) {
     return { error: "This configuration is within standard pricing — export it directly, no review needed." };
   }

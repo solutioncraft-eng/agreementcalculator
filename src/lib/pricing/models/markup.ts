@@ -12,6 +12,7 @@
  */
 import {
   belowFloorTriggers,
+  discountCappedTriggers,
   bundleFor,
   money,
   overrideTriggers,
@@ -75,12 +76,7 @@ function calculate(
   if (inputs.floorOverride) {
     triggers.push({ code: "FLOOR_OVERRIDE", message: "Floor overridden — actual below-floor rate in use" });
   }
-  if (tiers.some((tier) => tier.discountCappedAtCost)) {
-    triggers.push({
-      code: "DISCOUNT_CAPPED_AT_COST",
-      message: "Bundle discount capped at tool cost",
-    });
-  }
+  triggers.push(...discountCappedTriggers(tiers, "tool cost"));
 
   return {
     model: "MARKUP_MULTIPLE",

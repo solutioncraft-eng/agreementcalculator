@@ -12,6 +12,7 @@ import {
   tierChain,
   moneyRounded,
   tierResultFor,
+  forTier,
   type CalcInputs,
   type PricingConfig,
   type TierResult,
@@ -54,7 +55,7 @@ export function CalculatorClient({
   const [busy, setBusy] = useState<string | null>(null);
   const [state, submitAction, submitting] = useActionState<SubmitState, FormData>(submitForReview, {});
 
-  const result = useMemo(() => calculate(config, inputs), [config, inputs]);
+  const result = useMemo(() => forTier(calculate(config, inputs), tierKey), [config, inputs, tierKey]);
   const set = <K extends keyof CalcInputs>(key: K, value: CalcInputs[K]) =>
     setInputs((prev) => ({ ...prev, [key]: value }));
 
