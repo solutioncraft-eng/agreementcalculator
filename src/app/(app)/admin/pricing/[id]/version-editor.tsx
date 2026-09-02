@@ -345,7 +345,19 @@ export function VersionEditor({
                       >
                         Edit
                       </button>
-                      <form action={tierDeleteAction}>
+                      <form
+                        action={tierDeleteAction}
+                        onSubmit={(event) => {
+                          const own = costing.get(tier.key)?.own.length ?? 0;
+                          const detail =
+                            own > 0
+                              ? ` It carries ${own} COGS item${own === 1 ? "" : "s"} itself; those items stay in the draft but stop being carried by it.`
+                              : "";
+                          if (!window.confirm(`Remove ${tier.label} from this draft?${detail}`)) {
+                            event.preventDefault();
+                          }
+                        }}
+                      >
                         <input type="hidden" name="versionId" value={version.id} />
                         <input type="hidden" name="tierId" value={tier.id} />
                         <button type="submit" className="btn-ghost btn-sm text-orange-dark">
