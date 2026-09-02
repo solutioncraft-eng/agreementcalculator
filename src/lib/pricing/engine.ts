@@ -176,6 +176,8 @@ export type TriggerCode =
 export interface Trigger {
   code: TriggerCode;
   message: string;
+  /** Set when the trigger is about one offering rather than the quote as a whole. */
+  tierKey?: string;
 }
 
 export interface LineResult extends CogsLine {
@@ -328,6 +330,17 @@ export function tierChain(tiers: ServiceTierDef[], key: string): ServiceTierDef[
 /** The offering a key names, or the base offering when it names none. */
 export function tierResultFor(result: CalcResult, key: string): TierResult {
   return result.tiers.find((t) => t.key === key) ?? result.tiers[0];
+}
+
+/**
+ * The result as it applies to one quoted offering: quote-wide triggers stay,
+ * triggers about other offerings drop out, and approval follows what is left.
+ * Every surface that knows which offering is being sold reads through this.
+ */
+export function forTier(result: CalcResult, key: string): CalcResult {
+  const tierKey = tierResultFor(result, key).key;
+  const triggers = result.triggers.filter((t) => t.tierKey === undefined || t.tierKey === tierKey);
+  return { ...result, triggers, needsApproval: triggers.length > 0 };
 }
 
 /**
@@ -522,7 +535,19 @@ export function overrideTriggers(tiers: TierResult[]): Trigger[] {
     .filter((tier) => tier.overridden && tier.standardRate < tier.costFloor)
     .map((tier) => ({
       code: "OVERRIDE_BELOW_COST" as const,
+      tierKey: tier.key,
       message: `${tier.label} flat rate ${money(tier.standardRate)} is below its ${money(tier.costFloor)} cost floor — floor charged`,
+    }));
+}
+
+/** One trigger per offering whose bundle discount was capped at its cost floor. */
+export function discountCappedTriggers(tiers: TierResult[], floorName: string): Trigger[] {
+  return tiers
+    .filter((tier) => tier.discountCappedAtCost)
+    .map((tier) => ({
+      code: "DISCOUNT_CAPPED_AT_COST" as const,
+      tierKey: tier.key,
+      message: `${tier.label} bundle discount capped at ${floorName}`,
     }));
 }
 
@@ -532,6 +557,7 @@ export function belowFloorTriggers(tiers: TierResult[]): Trigger[] {
     .filter((tier) => tier.belowFloor)
     .map((tier) => ({
       code: "TIER_BELOW_FLOOR" as const,
+      tierKey: tier.key,
       message: `${tier.label} rate ${money(tier.perUser)}/user is below the ${money(tier.perUserFloor)}/user floor — floor rate applied`,
     }));
 }

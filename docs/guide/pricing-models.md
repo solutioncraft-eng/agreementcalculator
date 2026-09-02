@@ -46,7 +46,7 @@ Tool cost $40/user, labor multiplier 1.0 → cost floor $80/user. At the default
 
 ### What triggers review
 
-SGM off default, add-on multiplier off default, per-user floor changed, an offering below the floor, the floor override, a bundle discount capped at cost, or a flat rate below the cost floor.
+SGM off default, add-on multiplier off default, per-user floor changed, an offering below the floor, the floor override, a bundle discount capped at cost, or a flat rate below the cost floor. The last three are judged on the offering being quoted only — another offering in the version sitting under its floor does not hold up the quote.
 :::
 
 :::model MARKUP_MULTIPLE

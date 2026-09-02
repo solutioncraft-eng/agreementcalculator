@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   NO_BUNDLE,
+  forTier,
   type CalcInputs,
   type CogsLine,
   type PricingConfig,
@@ -226,4 +227,25 @@ test("an offering's own floor only binds that offering", () => {
   const tiers = calculate(costPlus([managed, noFloor]), { ...INPUTS, perUserFloor: 9 }).tiers;
   assert.equal(tiers.find((t) => t.key === "managed")?.belowFloor, true);
   assert.equal(tiers.find((t) => t.key === "co")?.belowFloor, false);
+});
+
+test("forTier keeps only the selected offering's per-offering flags", () => {
+  const noFloor: ServiceTierDef = { ...coManaged, perUserFloor: 0 };
+  const config = costPlus([managed, noFloor]);
+  config.settings = { ...config.settings, minPerUserFloor: 9 };
+  const result = calculate(config, { ...INPUTS, perUserFloor: 9 });
+  assert.equal(result.needsApproval, true);
+  const co = forTier(result, "co");
+  assert.equal(co.triggers.some((t) => t.code === "TIER_BELOW_FLOOR"), false);
+  assert.equal(co.needsApproval, false);
+  const full = forTier(result, "managed");
+  assert.equal(full.triggers.filter((t) => t.code === "TIER_BELOW_FLOOR").length, 1);
+  assert.equal(full.needsApproval, true);
+});
+
+test("forTier keeps quote-wide flags for every offering", () => {
+  const result = calculate(costPlus([managed, coManaged]), { ...INPUTS, sgmPct: 59 });
+  const co = forTier(result, "co");
+  assert.equal(co.triggers.some((t) => t.code === "SGM_NON_DEFAULT"), true);
+  assert.equal(co.needsApproval, true);
 });

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { audit } from "@/lib/audit";
 import { getTenantSession } from "@/lib/auth";
-import type { CalcInputs } from "@/lib/pricing/engine";
+import { forTier, type CalcInputs } from "@/lib/pricing/engine";
 import { calculate } from "@/lib/pricing/models";
 import { getActiveConfig, getConfigForVersion } from "@/lib/pricing/config";
 import {
@@ -125,15 +125,17 @@ export async function POST(request: Request) {
     : await getActiveConfig(db);
   if (!config) return NextResponse.json({ error: "No published pricing version" }, { status: 409 });
 
-  const result = calculate(config, inputs);
+  const priced = calculate(config, inputs);
 
   // The requested offering has to exist in the version being priced against.
-  if (!result.tiers.some((tier) => tier.key === payload.tierKey)) {
+  if (!priced.tiers.some((tier) => tier.key === payload.tierKey)) {
     return NextResponse.json(
       { error: "That offering is not part of this pricing version." },
       { status: 400 },
     );
   }
+
+  const result = forTier(priced, payload.tierKey);
 
   // Non-standard pricing can only leave the building once leadership has signed off.
   if (!quoteId && result.needsApproval) {
