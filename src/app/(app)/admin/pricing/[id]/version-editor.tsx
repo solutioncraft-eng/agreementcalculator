@@ -187,6 +187,11 @@ export function VersionEditor({
   const [editing, setEditing] = useState<string | null>(null);
   const [editingTier, setEditingTier] = useState<string | null>(null);
   const [pickingTier, setPickingTier] = useState<string | null>(null);
+  // The add form is open only when asked for, or when there is nothing to list yet.
+  const [addingTier, setAddingTier] = useState(tiers.length === 0);
+  useEffect(() => {
+    if (tierState.ok && editingTier === null && tiers.length > 0) setAddingTier(false);
+  }, [tierState, editingTier, tiers.length]);
   const tierLabel = (key: string) => tiers.find((tier) => tier.key === key)?.label ?? key;
   const costing = costings(tiers, items);
 
@@ -396,14 +401,23 @@ export function VersionEditor({
 
         {editable ? (
           <div className="mt-6 border-t border-mist pt-5">
-            <h3 className="label">Add an offering</h3>
-            <TierForm
-              action={tierAction}
-              versionId={version.id}
-              tiers={tiers}
-              items={items}
-              pending={savingTier}
-            />
+            {addingTier ? (
+              <>
+                <h3 className="label">Add an offering</h3>
+                <TierForm
+                  action={tierAction}
+                  versionId={version.id}
+                  tiers={tiers}
+                  items={items}
+                  pending={savingTier}
+                  onDone={tiers.length > 0 ? () => setAddingTier(false) : undefined}
+                />
+              </>
+            ) : (
+              <button type="button" className="btn-ghost" onClick={() => setAddingTier(true)}>
+                Add an offering
+              </button>
+            )}
           </div>
         ) : null}
 
