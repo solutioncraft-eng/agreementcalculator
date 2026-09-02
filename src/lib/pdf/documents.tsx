@@ -396,7 +396,7 @@ export function CogsDocument({ result, tierKey, clientName, notes, stamp, worksp
           ) : null}
           {t.belowFloor ? (
             <View style={styles.row}>
-              <Text>Per-user floor applied ({money(result.inputs.perUserFloor)}/user)</Text>
+              <Text>Per-user floor applied ({money(t.perUserFloor)}/user)</Text>
               <Text>{money(t.headlineRate - t.discountedRate)}</Text>
             </View>
           ) : null}

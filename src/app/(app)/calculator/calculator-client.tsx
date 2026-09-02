@@ -404,7 +404,7 @@ export function CalculatorClient({
                   ) : null}
                   {selected.belowFloor ? (
                     <Line
-                      label={`Per-user floor applied (${money(inputs.perUserFloor)}/user)`}
+                      label={`Per-user floor applied (${money(selected.perUserFloor)}/user)`}
                       value={money(selected.headlineRate - selected.discountedRate)}
                     />
                   ) : null}

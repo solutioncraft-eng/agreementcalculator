@@ -64,6 +64,7 @@ export function toConfig(version: VersionWithChildren): PricingConfig {
         perLocation: tier.overridePerLocation?.toNumber() ?? 0,
         flat: tier.overrideFlat?.toNumber() ?? 0,
       },
+      perUserFloor: tier.perUserFloor?.toNumber() ?? null,
     }));
 
   const base = {

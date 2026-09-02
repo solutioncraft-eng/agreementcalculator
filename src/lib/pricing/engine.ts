@@ -44,6 +44,11 @@ export interface ServiceTierDef {
   coManaged?: boolean;
   /** Flat rate that replaces the formula. Null/undefined when priced from cost. */
   rateOverride?: RateOverride | null;
+  /**
+   * Per-user floor for this offering alone. Null/undefined follows the quote's
+   * floor; 0 sells with no floor.
+   */
+  perUserFloor?: number | null;
 }
 
 /** Flat monthly rate components an admin can pin on an offering. */
@@ -206,6 +211,8 @@ export interface TierResult {
   perUser: number;
   headlinePerUser: number;
   belowFloor: boolean;
+  /** The per-user floor this offering was held to: the quote's, or its own. */
+  perUserFloor: number;
   discountCappedAtCost: boolean;
   /** This tier's own COGS lines. Its parent chain carries the rest. */
   lines: LineResult[];
@@ -382,11 +389,16 @@ export function ratesDiffer(a: number, b: number): boolean {
   return Math.abs(a - b) > 0.5;
 }
 
+/** The per-user floor an offering is held to: its own when set, else the quote's. */
+export function tierFloor(def: Pick<ServiceTierDef, "perUserFloor">, inputs: CalcInputs): number {
+  return def.perUserFloor ?? inputs.perUserFloor;
+}
+
 /** Per-user floor handling, shared by every model. */
-export function applyFloor(rate: number, inputs: CalcInputs) {
+export function applyFloor(rate: number, inputs: CalcInputs, perUserFloor = inputs.perUserFloor) {
   const users = Math.max(inputs.users, 1);
-  const floorRate = inputs.perUserFloor * users;
-  const belowFloor = !inputs.floorOverride && rate / users < inputs.perUserFloor;
+  const floorRate = perUserFloor * users;
+  const belowFloor = !inputs.floorOverride && rate / users < perUserFloor;
   return { users, floorRate, belowFloor, headlineRate: belowFloor ? floorRate : rate };
 }
 
@@ -447,7 +459,8 @@ export function priceTiers(
       ? overrideRate(override, inputs)
       : baseTool * base.baseMultiplier + addonTool * pricing.addonMultiplier;
     const bundle = applyBundle(standardRate, costFloor, pricing.bundlePct);
-    const floor = applyFloor(bundle.final, inputs);
+    const perUserFloor = tierFloor(def, inputs);
+    const floor = applyFloor(bundle.final, inputs, perUserFloor);
 
     return {
       key: def.key,
@@ -466,6 +479,7 @@ export function priceTiers(
       perUser: bundle.final / users,
       headlinePerUser: floor.headlineRate / users,
       belowFloor: floor.belowFloor,
+      perUserFloor,
       discountCappedAtCost: bundle.capped,
       lines,
     };
@@ -513,12 +527,12 @@ export function overrideTriggers(tiers: TierResult[]): Trigger[] {
 }
 
 /** One trigger per offering whose rate landed under the per-user floor. */
-export function belowFloorTriggers(tiers: TierResult[], inputs: CalcInputs): Trigger[] {
+export function belowFloorTriggers(tiers: TierResult[]): Trigger[] {
   return tiers
     .filter((tier) => tier.belowFloor)
     .map((tier) => ({
       code: "TIER_BELOW_FLOOR" as const,
-      message: `${tier.label} rate ${money(tier.perUser)}/user is below the ${money(inputs.perUserFloor)}/user floor — floor rate applied`,
+      message: `${tier.label} rate ${money(tier.perUser)}/user is below the ${money(tier.perUserFloor)}/user floor — floor rate applied`,
     }));
 }
 

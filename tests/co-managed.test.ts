@@ -190,3 +190,40 @@ test("the per-user floor still lifts an overridden rate", () => {
   assert.equal(tier.belowFloor, true);
   assert.equal(tier.headlinePerUser, 9);
 });
+
+// Co-managed cost-plus rate is $40 at 10 users = $4/user.
+
+test("an offering with no floor of its own is held to the quote's floor", () => {
+  const [tier] = calculate(costPlus([coManaged]), { ...INPUTS, perUserFloor: 9 }).tiers;
+  assert.equal(tier.perUserFloor, 9);
+  assert.equal(tier.belowFloor, true);
+  assert.equal(tier.headlinePerUser, 9);
+});
+
+test("an offering's own lower floor replaces the quote's floor", () => {
+  const lowFloor: ServiceTierDef = { ...coManaged, perUserFloor: 5 };
+  const result = calculate(costPlus([lowFloor]), { ...INPUTS, perUserFloor: 9 });
+  const [tier] = result.tiers;
+  assert.equal(tier.perUserFloor, 5);
+  assert.equal(tier.belowFloor, true);
+  assert.equal(tier.headlinePerUser, 5);
+  const trigger = result.triggers.find((t) => t.code === "TIER_BELOW_FLOOR");
+  assert.ok(trigger?.message.includes("$5.00/user floor"));
+});
+
+test("an offering's own floor of 0 sells with no per-user floor", () => {
+  const noFloor: ServiceTierDef = { ...coManaged, perUserFloor: 0 };
+  const result = calculate(costPlus([noFloor]), { ...INPUTS, perUserFloor: 9 });
+  const [tier] = result.tiers;
+  assert.equal(tier.perUserFloor, 0);
+  assert.equal(tier.belowFloor, false);
+  assert.equal(tier.headlinePerUser, 4);
+  assert.equal(result.triggers.some((t) => t.code === "TIER_BELOW_FLOOR"), false);
+});
+
+test("an offering's own floor only binds that offering", () => {
+  const noFloor: ServiceTierDef = { ...coManaged, perUserFloor: 0 };
+  const tiers = calculate(costPlus([managed, noFloor]), { ...INPUTS, perUserFloor: 9 }).tiers;
+  assert.equal(tiers.find((t) => t.key === "managed")?.belowFloor, true);
+  assert.equal(tiers.find((t) => t.key === "co")?.belowFloor, false);
+});

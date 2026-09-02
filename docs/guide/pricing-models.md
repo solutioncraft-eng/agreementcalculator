@@ -16,7 +16,7 @@ Whichever model you use:
 - **Offerings** can build on one another. A child offering includes everything its parent carries; the items it *adds* are priced with the add-on setting rather than the main lever.
 - A standalone offering can be marked **co-managed** — delivered alongside the client's own IT staff. Its tools, and those of every offering built on it, are priced with the version's co-managed lever instead of the main one, because the imputed labor (or markup) a fully managed agreement carries is too high when the client's team does most of the work.
 - Any offering can carry an optional **flat rate**: a price per user, per device, per location and/or a flat amount per month. When set, the sum replaces the model's formula as the offering's standard rate. The cost floor, per-user floor and bundle discounts still apply underneath, and a flat rate below the cost floor is flagged for review with the floor charged.
-- The **per-user floor** is the lowest per-user rate the workspace will sell. If a calculated rate lands below it, the floor is charged and the quote is flagged.
+- The **per-user floor** is the lowest per-user rate the workspace will sell. If a calculated rate lands below it, the floor is charged and the quote is flagged. An offering can carry a **per-user floor of its own** — lower than the version's, or 0 for no floor at all — which is typical for a co-managed offering whose seats cost far less to support. The COGS cost floor still applies to it.
 - **Bundle discounts** come off the sell rate, but never below cost. A discount that would breach cost is capped and the quote is flagged.
 - The Calculator reports the **achieved gross margin** for each offering so you can see the outcome of any lever setting.
 

@@ -102,6 +102,8 @@ export const serviceTierSchema = z.object({
   overridePerDevice: overrideRateSchema,
   overridePerLocation: overrideRateSchema,
   overrideFlat: overrideRateSchema,
+  /** Blank follows the quote's per-user floor; 0 means no floor for this offering. */
+  perUserFloor: overrideRateSchema,
 });
 
 /**
