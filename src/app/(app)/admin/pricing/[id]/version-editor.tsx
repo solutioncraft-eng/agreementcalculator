@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import clsx from "clsx";
 import { money } from "@/lib/pricing/engine";
 import { DEFAULT_INPUTS } from "@/lib/pricing/defaults";
@@ -173,7 +173,6 @@ export function VersionEditor({
 }) {
   const editable = version.status === "DRAFT";
   const [modelState, modelAction, savingModel] = useActionState<AdminState, FormData>(updateVersion, {});
-  const [itemState, itemAction, savingItem] = useActionState<AdminState, FormData>(saveCogsItem, {});
   const [deleteState, deleteAction] = useActionState<AdminState, FormData>(deleteCogsItem, {});
   const [bundleState, bundleAction, savingBundle] = useActionState<AdminState, FormData>(saveBundle, {});
   const [bundleDeleteState, bundleDeleteAction] = useActionState<AdminState, FormData>(deleteBundle, {});
@@ -285,8 +284,6 @@ export function VersionEditor({
                   tier={tier}
                   items={items}
                   pending={savingTier}
-                  itemAction={itemAction}
-                  savingItem={savingItem}
                   onDone={() => setEditingTier(null)}
                 />
               ) : (
@@ -406,8 +403,6 @@ export function VersionEditor({
               tiers={tiers}
               items={items}
               pending={savingTier}
-              itemAction={itemAction}
-              savingItem={savingItem}
             />
           </div>
         ) : null}
@@ -486,11 +481,9 @@ export function VersionEditor({
             <li key={item.id} className="py-3">
               {editing === item.id ? (
                 <ItemForm
-                  action={itemAction}
                   versionId={version.id}
                   tiers={tiers}
                   item={item}
-                  pending={savingItem}
                   onDone={() => setEditing(null)}
                 />
               ) : (
@@ -554,7 +547,6 @@ export function VersionEditor({
           ))}
           {items.length === 0 ? <li className="py-3 text-slate">No COGS items on this version.</li> : null}
         </ul>
-        <Feedback state={itemState} />
         <Feedback state={deleteState} />
 
         {editable ? (
@@ -564,7 +556,7 @@ export function VersionEditor({
               Pick every offering that carries it. An offering that builds on another does not need the parent&apos;s
               items ticked again.
             </p>
-            <ItemForm action={itemAction} versionId={version.id} tiers={tiers} pending={savingItem} />
+            <ItemForm versionId={version.id} tiers={tiers} />
           </div>
         ) : null}
       </section>
@@ -740,8 +732,6 @@ function TierForm({
   tier,
   items,
   pending,
-  itemAction,
-  savingItem,
   onDone,
 }: {
   action: (formData: FormData) => void;
@@ -750,8 +740,6 @@ function TierForm({
   tier?: TierView;
   items: ItemView[];
   pending: boolean;
-  itemAction: (formData: FormData) => void;
-  savingItem: boolean;
   onDone?: () => void;
 }) {
   // An offering cannot build on itself or on anything that builds on it.
@@ -888,11 +876,9 @@ function TierForm({
           </p>
           <div className="mt-2">
             <ItemForm
-              action={itemAction}
               versionId={versionId}
               tiers={tiers}
               presetTierKeys={tier ? [tier.key] : []}
-              pending={savingItem}
               onDone={() => setAddingItem(false)}
             />
           </div>
@@ -902,23 +888,30 @@ function TierForm({
   );
 }
 
+/**
+ * Adds or edits one COGS item. Owns its own action state so the outcome shows
+ * beside the form, and an edit closes itself once saved — React resets an
+ * open form to the values it was rendered with, which would otherwise show the
+ * item's old offerings as if the save had not happened.
+ */
 function ItemForm({
-  action,
   versionId,
   tiers,
   item,
   presetTierKeys,
-  pending,
   onDone,
 }: {
-  action: (formData: FormData) => void;
   versionId: string;
   tiers: TierView[];
   item?: ItemView;
   presetTierKeys?: string[];
-  pending: boolean;
   onDone?: () => void;
 }) {
+  const [state, action, pending] = useActionState<AdminState, FormData>(saveCogsItem, {});
+  useEffect(() => {
+    if (state.ok && item) onDone?.();
+  }, [state, item, onDone]);
+
   return (
     <form action={action} className="grid gap-3 md:grid-cols-4 md:items-end">
       <input type="hidden" name="versionId" value={versionId} />
@@ -995,6 +988,9 @@ function ItemForm({
             Cancel
           </button>
         ) : null}
+      </div>
+      <div className="md:col-span-4">
+        <Feedback state={state} />
       </div>
     </form>
   );
