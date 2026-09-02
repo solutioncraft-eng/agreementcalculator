@@ -911,6 +911,20 @@ function ItemForm({
   useEffect(() => {
     if (state.ok && item) onDone?.();
   }, [state, item, onDone]);
+  // Controlled so a failed save keeps what was ticked instead of resetting.
+  const [carried, setCarried] = useState<Set<string>>(
+    () =>
+      new Set(
+        item ? item.tierKeys : (presetTierKeys ?? tiers.slice(0, 1).map((tier) => tier.key)),
+      ),
+  );
+  const toggle = (key: string, on: boolean) =>
+    setCarried((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(key);
+      else next.delete(key);
+      return next;
+    });
 
   return (
     <form action={action} className="grid gap-3 md:grid-cols-4 md:items-end">
@@ -945,7 +959,7 @@ function ItemForm({
       <div className="md:col-span-4">
         <span className="label">Carried by these offerings</span>
         <div className="mt-1 flex flex-wrap gap-2">
-          {tiers.map((tier, index) => (
+          {tiers.map((tier) => (
             <label
               key={tier.key}
               className="flex items-center gap-2 rounded-brand border border-steel px-3 py-2 text-[13px]"
@@ -954,13 +968,8 @@ function ItemForm({
                 type="checkbox"
                 name="tierKeys"
                 value={tier.key}
-                defaultChecked={
-                  item
-                    ? item.tierKeys.includes(tier.key)
-                    : presetTierKeys
-                      ? presetTierKeys.includes(tier.key)
-                      : index === 0
-                }
+                checked={carried.has(tier.key)}
+                onChange={(event) => toggle(tier.key, event.target.checked)}
                 className="h-4 w-4 accent-orange"
               />
               {tier.label}

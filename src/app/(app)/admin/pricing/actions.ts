@@ -299,7 +299,11 @@ export async function saveCogsItem(_prev: AdminState, formData: FormData): Promi
   }
 
   revalidatePath(`/admin/pricing/${versionId}`);
-  return { ok: itemId ? "Item updated." : `Added ${data.label}.` };
+  const uncarried =
+    tierKeys.length === 0 && data.active !== false
+      ? ` No offering carries ${data.label} — assign or deactivate it before publishing.`
+      : "";
+  return { ok: (itemId ? "Item updated." : `Added ${data.label}.`) + uncarried };
 }
 
 export async function deleteCogsItem(_prev: AdminState, formData: FormData): Promise<AdminState> {
