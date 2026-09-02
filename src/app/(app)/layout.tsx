@@ -8,6 +8,7 @@ import { describeDaysLeft } from "@/lib/trial";
 import { workspaceAccess } from "@/lib/billing";
 import { formatUtc } from "@/lib/quotes";
 import { NavLink } from "@/components/nav-link";
+import { NavMenu } from "@/components/nav-menu";
 import { TenantLogo } from "@/components/tenant-logo";
 import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 import { logout } from "./actions";
@@ -47,14 +48,24 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               </NavLink>
             ) : null}
             {canAdminister(role) ? (
-              <>
-                <NavLink href="/admin/pricing">Pricing</NavLink>
-                <NavLink href="/admin/users">People</NavLink>
-                <NavLink href="/admin/branding">Branding</NavLink>
-                <NavLink href="/admin/billing">Billing</NavLink>
-                <NavLink href="/admin/audit">Audit log</NavLink>
-              </>
+              <NavMenu
+                label="Settings"
+                items={[
+                  { href: "/admin/pricing", label: "Pricing" },
+                  { href: "/admin/users", label: "People" },
+                  { href: "/admin/branding", label: "Branding" },
+                  { href: "/admin/billing", label: "Billing" },
+                  { href: "/admin/audit", label: "Audit log" },
+                ]}
+              />
             ) : null}
+            <NavMenu
+              label="Help"
+              items={[
+                { href: "/help/changelog", label: "What's new", hint: "Recent changes to the app" },
+                { href: "/help/support", label: "Support & requests", hint: "Report a problem or ask for an enhancement" },
+              ]}
+            />
             {user.isSuperAdmin ? <NavLink href="/super">Super-admin</NavLink> : null}
           </nav>
           <div className="ml-auto flex shrink-0 items-center gap-4 text-right lg:ml-0">

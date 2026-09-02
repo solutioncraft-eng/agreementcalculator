@@ -53,7 +53,9 @@ export type AuditAction =
   | "MEMBERSHIP_CREATED"
   | "MEMBERSHIP_UPDATED"
   | "MEMBERSHIP_REMOVED"
-  | "WORKSPACE_SWITCHED";
+  | "WORKSPACE_SWITCHED"
+  | "SUPPORT_REQUEST_SENT"
+  | "ENHANCEMENT_REQUEST_SENT";
 
 interface AuditInput {
   action: AuditAction;
