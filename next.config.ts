@@ -13,6 +13,8 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/api/export": ["./node_modules/pdfkit/js/standard-fonts/**", "./public/infinit-logo.png"],
     "/help/changelog": ["./CHANGELOG.md"],
+    "/help/guide": ["./docs/guide/**"],
+    "/help/guide/[slug]": ["./docs/guide/**"],
   },
 };
 
