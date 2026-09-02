@@ -14,6 +14,7 @@ import {
   belowFloorTriggers,
   bundleFor,
   money,
+  overrideTriggers,
   priceTiers,
   round2,
   type CalcInputs,
@@ -32,6 +33,9 @@ function calculate(
   const sgm = Math.min(Math.max(inputs.sgmPct, 0), s.maxSgmPct) / 100;
   const costMult = 1 + s.laborMultiplier;
   const multiplier = costMult / (1 - sgm);
+  // A co-managed offering shares delivery with the client's IT staff, so its
+  // base tools carry less imputed labor at the same margin.
+  const coManagedCostMult = 1 + s.coManagedLaborMultiplier;
 
   const bundle = bundleFor(config, inputs.bundleKey);
 
@@ -42,6 +46,7 @@ function calculate(
     costMultiplier: costMult,
     baseMultiplier: multiplier,
     addonMultiplier: inputs.addonMultiplier,
+    coManaged: { costMultiplier: coManagedCostMult, baseMultiplier: coManagedCostMult / (1 - sgm) },
     bundlePct: bundle.discountPct / 100,
   });
 
@@ -61,7 +66,7 @@ function calculate(
       message: `Minimum per-user floor changed from ${money(s.minPerUserFloor)} to ${money(inputs.perUserFloor)}`,
     });
   }
-  triggers.push(...belowFloorTriggers(tiers, inputs));
+  triggers.push(...belowFloorTriggers(tiers, inputs), ...overrideTriggers(tiers));
   if (inputs.floorOverride) {
     triggers.push({ code: "FLOOR_OVERRIDE", message: "Floor overridden — actual below-floor rate in use" });
   }
@@ -103,6 +108,7 @@ export const costPlusModel: PricingModelAdapter<CostPlusSettings> = {
     maxSgmPct: 70,
     minPerUserFloor: 100,
     addonMultiplier: 4.83,
+    coManagedLaborMultiplier: 1,
   },
   startingInputs: (s) => ({
     sgmPct: s.defaultSgmPct,

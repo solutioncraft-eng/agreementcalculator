@@ -14,6 +14,8 @@ Whichever model you use:
 
 - **Tool cost** is the only real dollar figure. It is the sum of the active COGS items an offering carries, each multiplied by the environment (users, devices, locations, or flat).
 - **Offerings** can build on one another. A child offering includes everything its parent carries; the items it *adds* are priced with the add-on setting rather than the main lever.
+- A standalone offering can be marked **co-managed** — delivered alongside the client's own IT staff. Its tools, and those of every offering built on it, are priced with the version's co-managed lever instead of the main one, because the imputed labor (or markup) a fully managed agreement carries is too high when the client's team does most of the work.
+- Any offering can carry an optional **flat rate**: a price per user, per device, per location and/or a flat amount per month. When set, the sum replaces the model's formula as the offering's standard rate. The cost floor, per-user floor and bundle discounts still apply underneath, and a flat rate below the cost floor is flagged for review with the floor charged.
 - The **per-user floor** is the lowest per-user rate the workspace will sell. If a calculated rate lands below it, the floor is charged and the quote is flagged.
 - **Bundle discounts** come off the sell rate, but never below cost. A discount that would breach cost is capped and the quote is flagged.
 - The Calculator reports the **achieved gross margin** for each offering so you can see the outcome of any lever setting.
@@ -36,6 +38,7 @@ Add-on tools above the base offering are low-touch, so they carry no imputed lab
 | **Maximum service gross margin** (%) | The slider cannot go higher than this. |
 | **Minimum per-user floor** ($) | Where the per-user floor starts. |
 | **Add-on multiplier** (×) | Applied to the tool cost of items an offering adds on top of its parent. |
+| **Co-managed labor multiplier** (×) | Imputed labor on the base tools of a co-managed offering. Lower than the labor multiplier, since the client's staff carry part of the work. |
 
 ### Worked example
 
@@ -43,7 +46,7 @@ Tool cost $40/user, labor multiplier 1.0 → cost floor $80/user. At the default
 
 ### What triggers review
 
-SGM off default, add-on multiplier off default, per-user floor changed, an offering below the floor, the floor override, or a bundle discount capped at cost.
+SGM off default, add-on multiplier off default, per-user floor changed, an offering below the floor, the floor override, a bundle discount capped at cost, or a flat rate below the cost floor.
 :::
 
 :::model MARKUP_MULTIPLE
@@ -64,6 +67,7 @@ There is no imputed labor and no margin to solve for, so the cost floor is raw t
 | **Minimum per-user floor** ($) | Where the per-user floor starts. |
 | **Maximum discount** (%) | A bundle that discounts more than this is flagged. |
 | **Add-on markup** (×) | Applied to the tool cost of items an offering adds on top of its parent. Fixed per version; not editable in the Calculator. |
+| **Co-managed markup** (×) | Applied to the base tools of a co-managed offering instead of the Calculator's markup. Fixed per version. |
 
 ### Worked example
 
@@ -71,7 +75,7 @@ Tool cost $40/user, default markup 2.5× → **$100/user**, of which 40% is tool
 
 ### What triggers review
 
-Markup below default, markup below minimum, discount over maximum, per-user floor changed, an offering below the floor, the floor override, or a bundle discount capped at cost.
+Markup below default, markup below minimum, discount over maximum, per-user floor changed, an offering below the floor, the floor override, a bundle discount capped at cost, or a flat rate below the cost floor.
 :::
 
 ## Changing the settings

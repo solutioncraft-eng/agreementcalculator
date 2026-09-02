@@ -19,7 +19,14 @@
  * parent, in which case it includes its whole parent chain's items and the
  * items it adds are priced with the add-on multiplier rather than the base one.
  * {@link priceTiers} owns that arithmetic for every model, so a model only
- * decides three multipliers.
+ * decides a few multipliers.
+ *
+ * Two things bend that arithmetic per offering. A *co-managed* offering is
+ * delivered alongside the client's own IT staff, so the root of its chain is
+ * priced with the model's co-managed lever (less imputed labor, or a lower
+ * markup) instead of the main one. A *rate override* replaces the formula with
+ * a flat rate per user / device / location / agreement the admin set on the
+ * offering; the COGS cost floor, bundle cap and per-user floor still apply.
  */
 
 export type Unit = "USER" | "DEVICE" | "LOCATION" | "FLAT";
@@ -33,6 +40,35 @@ export interface ServiceTierDef {
   sortOrder?: number;
   /** Key of the offering this one builds on. Null/undefined when standalone. */
   parentKey?: string | null;
+  /** Delivered alongside the client's IT staff; prices with the co-managed lever. */
+  coManaged?: boolean;
+  /** Flat rate that replaces the formula. Null/undefined when priced from cost. */
+  rateOverride?: RateOverride | null;
+}
+
+/** Flat monthly rate components an admin can pin on an offering. */
+export interface RateOverride {
+  perUser: number;
+  perDevice: number;
+  perLocation: number;
+  flat: number;
+}
+
+export function overrideRate(override: RateOverride, i: CalcInputs): number {
+  return (
+    override.perUser * i.users +
+    override.perDevice * i.devices +
+    override.perLocation * i.locations +
+    override.flat
+  );
+}
+
+/** True when at least one component of the override is set. */
+export function hasOverride(override: RateOverride | null | undefined): override is RateOverride {
+  return (
+    !!override &&
+    (override.perUser > 0 || override.perDevice > 0 || override.perLocation > 0 || override.flat > 0)
+  );
 }
 
 export interface CogsLine {
@@ -65,6 +101,8 @@ export interface CostPlusSettings {
   minPerUserFloor: number;
   /** Reduced multiplier applied to low-touch add-on tools. */
   addonMultiplier: number;
+  /** Imputed labor on a co-managed offering's base tools, as a multiple of tool cost. */
+  coManagedLaborMultiplier: number;
 }
 
 export interface MarkupSettings {
@@ -77,6 +115,8 @@ export interface MarkupSettings {
   maxDiscountPct: number;
   /** Multiple applied to low-touch add-on tools. */
   addonMarkup: number;
+  /** Markup on a co-managed offering's base tools. */
+  coManagedMarkup: number;
 }
 
 export type ModelSettings = CostPlusSettings | MarkupSettings;
@@ -125,7 +165,8 @@ export type TriggerCode =
   | "ADDON_MULTIPLIER_NON_DEFAULT"
   | "MARKUP_BELOW_DEFAULT"
   | "MARKUP_BELOW_MINIMUM"
-  | "DISCOUNT_OVER_MAX";
+  | "DISCOUNT_OVER_MAX"
+  | "OVERRIDE_BELOW_COST";
 
 export interface Trigger {
   code: TriggerCode;
@@ -147,6 +188,10 @@ export interface TierResult {
   index: number;
   /** The offering this one builds on, or null when it stands alone. */
   parentKey: string | null;
+  /** The root of this offering's chain is co-managed. */
+  coManaged: boolean;
+  /** The standard rate came from the offering's flat-rate override, not the formula. */
+  overridden: boolean;
   /** Monthly tool cost — confidential, cumulative with the tiers below. */
   toolCost: number;
   /** The rate can never fall below this. Cost-plus adds imputed labor. */
@@ -353,6 +398,8 @@ export interface TierPricing {
   baseMultiplier: number;
   /** Sell multiplier on the tools each tier above the base adds. */
   addonMultiplier: number;
+  /** Cost floor and sell multipliers for the base tools of a co-managed chain. */
+  coManaged: { costMultiplier: number; baseMultiplier: number };
   /** Bundle discount as a fraction, e.g. 0.15. */
   bundlePct: number;
 }
@@ -392,8 +439,13 @@ export function priceTiers(
       }
     });
 
-    const costFloor = baseTool * pricing.costMultiplier + addonTool;
-    const standardRate = baseTool * pricing.baseMultiplier + addonTool * pricing.addonMultiplier;
+    const coManaged = chain[0]?.coManaged === true;
+    const base = coManaged ? pricing.coManaged : pricing;
+    const costFloor = baseTool * base.costMultiplier + addonTool;
+    const override = hasOverride(def.rateOverride) ? def.rateOverride : null;
+    const standardRate = override
+      ? overrideRate(override, inputs)
+      : baseTool * base.baseMultiplier + addonTool * pricing.addonMultiplier;
     const bundle = applyBundle(standardRate, costFloor, pricing.bundlePct);
     const floor = applyFloor(bundle.final, inputs);
 
@@ -403,6 +455,8 @@ export function priceTiers(
       description: def.description,
       index,
       parentKey: chain.length > 1 ? chain[chain.length - 2].key : null,
+      coManaged,
+      overridden: override !== null,
       toolCost: baseTool + addonTool,
       costFloor,
       standardRate,
@@ -435,6 +489,27 @@ export function priceTiers(
   });
 
   return { tiers, deltas, floorRate, users };
+}
+
+/** Where an offering's standard rate came from, for the rate breakdown line. */
+export function standardRateLabel(tier: TierResult, result: CalcResult): string {
+  if (tier.overridden) return "Flat rate set by your admin";
+  if (result.model === "COST_PLUS") {
+    return `Standard rate at ${result.split.sgmPct}% SGM${tier.coManaged ? ", co-managed labor" : ""}`;
+  }
+  return tier.coManaged
+    ? "Standard rate at the co-managed markup"
+    : `Standard rate at ${result.multiplier.toFixed(2)}× tool cost`;
+}
+
+/** One trigger per offering whose flat-rate override sits under its cost floor. */
+export function overrideTriggers(tiers: TierResult[]): Trigger[] {
+  return tiers
+    .filter((tier) => tier.overridden && tier.standardRate < tier.costFloor)
+    .map((tier) => ({
+      code: "OVERRIDE_BELOW_COST" as const,
+      message: `${tier.label} flat rate ${money(tier.standardRate)} is below its ${money(tier.costFloor)} cost floor — floor charged`,
+    }));
 }
 
 /** One trigger per offering whose rate landed under the per-user floor. */

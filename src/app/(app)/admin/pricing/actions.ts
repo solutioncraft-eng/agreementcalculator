@@ -69,6 +69,11 @@ export async function createDraft(): Promise<void> {
               description: tier.description,
               parentKey: tier.parentKey,
               sortOrder: tier.sortOrder,
+              coManaged: tier.coManaged,
+              overridePerUser: tier.overridePerUser,
+              overridePerDevice: tier.overridePerDevice,
+              overridePerLocation: tier.overridePerLocation,
+              overrideFlat: tier.overrideFlat,
             }))
           : SEED_SERVICE_TIERS.map((tier, index) => ({ ...tier, sortOrder: index }))
         ).map((tier) => ({ ...tier, tenantId: tenant.id })),
@@ -461,10 +466,23 @@ export async function saveServiceTier(_prev: AdminState, formData: FormData): Pr
     label: formData.get("label"),
     description: formData.get("description") ?? undefined,
     parentKey: formData.get("parentKey") ?? undefined,
+    coManaged: formData.get("coManaged") === "on",
+    overridePerUser: formData.get("overridePerUser") ?? undefined,
+    overridePerDevice: formData.get("overridePerDevice") ?? undefined,
+    overridePerLocation: formData.get("overridePerLocation") ?? undefined,
+    overrideFlat: formData.get("overrideFlat") ?? undefined,
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the offering." };
   const data = parsed.data;
   const parentKey = data.parentKey || null;
+  // A zero component is the same as none, so the stored row reads cleanly.
+  const pricing = {
+    coManaged: data.coManaged,
+    overridePerUser: data.overridePerUser || null,
+    overridePerDevice: data.overridePerDevice || null,
+    overridePerLocation: data.overridePerLocation || null,
+    overrideFlat: data.overrideFlat || null,
+  };
   // The form only submits memberships when it showed the item checklist, so an
   // ordinary rename never clears the offering's stack.
   const chosenItems = formData.has("chooseItems")
@@ -490,7 +508,7 @@ export async function saveServiceTier(_prev: AdminState, formData: FormData): Pr
 
     await db.serviceTier.update({
       where: { id: tierId },
-      data: { label: data.label, description: data.description || null, parentKey },
+      data: { label: data.label, description: data.description || null, parentKey, ...pricing },
     });
     const change = chosenItems
       ? await setOwnItems(db, tenant.id, versionId, before.key, chosenItems)
@@ -505,9 +523,14 @@ export async function saveServiceTier(_prev: AdminState, formData: FormData): Pr
         label: before.label,
         description: before.description,
         parentKey: before.parentKey,
+        coManaged: before.coManaged,
+        overridePerUser: before.overridePerUser,
+        overridePerDevice: before.overridePerDevice,
+        overridePerLocation: before.overridePerLocation,
+        overrideFlat: before.overrideFlat,
         ...(change ? { ownItems: change.before } : {}),
       },
-      after: { ...data, parentKey, ...(change ? { ownItems: change.after } : {}) },
+      after: { ...data, parentKey, ...pricing, ...(change ? { ownItems: change.after } : {}) },
       tenantId: tenant.id,
       actor: user,
     });
@@ -535,6 +558,7 @@ export async function saveServiceTier(_prev: AdminState, formData: FormData): Pr
       description: data.description || null,
       parentKey,
       sortOrder: (tiers.at(-1)?.sortOrder ?? -1) + 1,
+      ...pricing,
     },
   });
   const change = chosenItems ? await setOwnItems(db, tenant.id, versionId, key, chosenItems) : null;
@@ -546,7 +570,7 @@ export async function saveServiceTier(_prev: AdminState, formData: FormData): Pr
     summary: `Offering "${data.label}" added to draft ${version.label}${
       parentKey ? `, building on ${tiers.find((tier) => tier.key === parentKey)?.label}` : " as a standalone offering"
     }`,
-    after: { ...data, key, parentKey, ...(change ? { ownItems: change.after } : {}) },
+    after: { ...data, key, parentKey, ...pricing, ...(change ? { ownItems: change.after } : {}) },
     tenantId: tenant.id,
     actor: user,
   });

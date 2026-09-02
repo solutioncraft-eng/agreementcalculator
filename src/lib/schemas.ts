@@ -80,6 +80,11 @@ export const tenantBrandingSchema = z.object({
   pdfFooter: z.string().trim().max(200).optional().or(z.literal("")),
 });
 
+const overrideRateSchema = z.preprocess(
+  (value) => (value === "" || value === undefined ? null : value),
+  z.coerce.number().min(0).max(100_000).nullable(),
+);
+
 /** One offering on a draft pricing version. */
 export const serviceTierSchema = z.object({
   label: z.string().trim().min(2, "Name the offering.").max(40),
@@ -87,6 +92,16 @@ export const serviceTierSchema = z.object({
   sortOrder: z.coerce.number().int().min(0).max(999).optional(),
   /** The offering this one builds on. Empty means it stands alone. */
   parentKey: tierKeySchema.optional().or(z.literal("")),
+  /** Delivered alongside the client's IT staff; priced with the co-managed lever. */
+  coManaged: z.coerce.boolean().default(false),
+  /**
+   * Flat-rate override components. Blank means "none"; any positive component
+   * makes the offering sell for the sum instead of the model's formula.
+   */
+  overridePerUser: overrideRateSchema,
+  overridePerDevice: overrideRateSchema,
+  overridePerLocation: overrideRateSchema,
+  overrideFlat: overrideRateSchema,
 });
 
 /**

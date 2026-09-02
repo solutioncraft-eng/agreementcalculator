@@ -8,6 +8,7 @@ import {
   money,
   moneyRounded,
   ratesDiffer,
+  standardRateLabel,
   tierChain,
   tierResultFor,
 } from "@/lib/pricing/engine";
@@ -375,7 +376,7 @@ export function CogsDocument({ result, tierKey, clientName, notes, stamp, worksp
             <Text>{money(t.costFloor)}</Text>
           </View>
           <View style={[styles.row, { marginTop: 6 }]}>
-            <Text>Standard rate at {result.split.sgmPct}% service gross margin</Text>
+            <Text>{standardRateLabel(t, result)}</Text>
             <Text>{money(t.standardRate)}</Text>
           </View>
           {t.discount > 0 ? (

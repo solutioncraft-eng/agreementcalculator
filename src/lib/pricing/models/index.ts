@@ -22,6 +22,8 @@ export const costPlusSettingsSchema = z.object({
   maxSgmPct: z.coerce.number().min(1).max(95),
   minPerUserFloor: z.coerce.number().min(0).max(10_000),
   addonMultiplier: z.coerce.number().min(1).max(20),
+  // Defaulted so versions stored before the lever existed still parse.
+  coManagedLaborMultiplier: z.coerce.number().min(0).max(20).default(1),
 });
 
 export const markupSettingsSchema = z.object({
@@ -30,6 +32,7 @@ export const markupSettingsSchema = z.object({
   minPerUserFloor: z.coerce.number().min(0).max(10_000),
   maxDiscountPct: z.coerce.number().min(0).max(90),
   addonMarkup: z.coerce.number().min(1).max(50),
+  coManagedMarkup: z.coerce.number().min(1).max(50).default(2.5),
 });
 
 export const pricingModelKeySchema = z.enum(["COST_PLUS", "MARKUP_MULTIPLE"]);
@@ -46,6 +49,7 @@ export const PRICING_MODELS = {
       { name: "maxSgmPct", label: "Maximum service gross margin", suffix: "%", step: "0.5" },
       { name: "minPerUserFloor", label: "Minimum per-user floor", suffix: "$", step: "1" },
       { name: "addonMultiplier", label: "Add-on multiplier", suffix: "×", step: "0.01" },
+      { name: "coManagedLaborMultiplier", label: "Co-managed labor multiplier", suffix: "×", step: "0.01" },
     ],
   },
   MARKUP_MULTIPLE: {
@@ -57,6 +61,7 @@ export const PRICING_MODELS = {
       { name: "minPerUserFloor", label: "Minimum per-user floor", suffix: "$", step: "1" },
       { name: "maxDiscountPct", label: "Maximum discount", suffix: "%", step: "0.5" },
       { name: "addonMarkup", label: "Add-on markup", suffix: "×", step: "0.01" },
+      { name: "coManagedMarkup", label: "Co-managed markup", suffix: "×", step: "0.01" },
     ],
   },
 } as const;

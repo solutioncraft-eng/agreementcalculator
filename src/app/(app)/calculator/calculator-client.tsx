@@ -8,6 +8,7 @@ import {
   includedLines,
   money,
   ratesDiffer,
+  standardRateLabel,
   tierChain,
   moneyRounded,
   tierResultFor,
@@ -386,11 +387,7 @@ export function CalculatorClient({
                   ) : null}
                   <Line label="Hard cost floor" value={money(selected.costFloor)} strong />
                   <Line
-                    label={
-                      config.model === "COST_PLUS"
-                        ? `Standard rate at ${result.split.sgmPct}% SGM`
-                        : `Standard rate at ${result.multiplier.toFixed(2)}× tool cost`
-                    }
+                    label={standardRateLabel(selected, result)}
                     value={money(selected.standardRate)}
                   />
                   {selected.discount > 0 ? (

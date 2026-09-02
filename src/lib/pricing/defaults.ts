@@ -18,6 +18,7 @@ export const SEED_COST_PLUS_SETTINGS = {
   maxSgmPct: 70,
   minPerUserFloor: 100,
   addonMultiplier: 4.83,
+  coManagedLaborMultiplier: 1,
 };
 
 /**
@@ -34,18 +35,21 @@ export const SEED_SERVICE_TIERS = [
     label: "Parent Agreement",
     description: "Fully managed core services",
     parentKey: null,
+    coManaged: false,
   },
   {
     key: "addon",
     label: "Add-On Agreement",
     description: "Parent Agreement plus the advanced security stack",
     parentKey: "parent",
+    coManaged: false,
   },
   {
     key: "co-managed",
     label: "Co-Managed Agreement",
     description: "Standalone: delivered alongside the client's own IT staff",
     parentKey: null,
+    coManaged: true,
   },
 ] as const;
 
