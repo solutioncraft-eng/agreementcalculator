@@ -23,7 +23,7 @@ Everything below is under **Settings → People**.
 
 Enter their name, work email and role and press **Add to workspace**.
 
-- If the email is new to Agreement Calculator, an account is created with a temporary password and a welcome email is sent. The temporary password is also shown to you once, in case the email does not arrive. They must change it at first sign-in.
+- If the email is new to Agreement Calculator, an account is created and a welcome email is sent. Its link (valid for a week, single use) takes them to a page where they either continue with Google or choose a password. If the email cannot be delivered, a temporary password is shown to you once instead, to hand over securely; they must change it at first sign-in.
 - If the email already has an account (from another workspace), they are simply given a membership here and emailed that they now have access. No new password is issued.
 
 ### Change a role
@@ -36,7 +36,7 @@ Pick a new role beside the person. You cannot downgrade your own administrator a
 
 ### Help with sign-in
 
-**Resend welcome email** sends the welcome email again. **Reset password** issues a new temporary password and emails it. Both are audited.
+**Resend welcome email** sends a fresh welcome link (earlier links stop working). **Reset password** issues a new temporary password and emails it. Both are audited.
 :::
 
 ## Google sign-in

@@ -23,6 +23,7 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
           "/login",
           "/forgot-password",
           "/reset-password",
+          "/welcome",
           "/calculator",
           "/quotes",
           "/reviews",

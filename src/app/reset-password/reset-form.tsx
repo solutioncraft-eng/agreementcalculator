@@ -4,7 +4,13 @@ import Link from "next/link";
 import { useActionState } from "react";
 import { completeReset, type ResetState } from "./actions";
 
-export function ResetForm({ token }: { token: string }) {
+export function ResetForm({
+  token,
+  submitLabel = "Set new password",
+}: {
+  token: string;
+  submitLabel?: string;
+}) {
   const [state, action, pending] = useActionState<ResetState, FormData>(completeReset, {});
 
   return (
@@ -12,7 +18,7 @@ export function ResetForm({ token }: { token: string }) {
       <input type="hidden" name="token" value={token} />
       <div>
         <label className="label" htmlFor="next">
-          New password
+          Password
         </label>
         <input
           id="next"
@@ -27,7 +33,7 @@ export function ResetForm({ token }: { token: string }) {
       </div>
       <div>
         <label className="label" htmlFor="confirm">
-          Confirm new password
+          Confirm password
         </label>
         <input
           id="confirm"
@@ -46,7 +52,7 @@ export function ResetForm({ token }: { token: string }) {
       ) : null}
 
       <button type="submit" className="btn-primary w-full" disabled={pending}>
-        {pending ? "Saving…" : "Set new password"}
+        {pending ? "Saving…" : submitLabel}
       </button>
       <Link href="/login" className="block text-[13px] font-medium text-slate hover:text-orange">
         Back to sign in
