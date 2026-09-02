@@ -35,6 +35,23 @@ signed session, so it cannot be changed by editing a URL. Users whose workspace 
 Workspaces are addressed as subdomains (`acme.agreementcalculator.com`). When the host matches a workspace it
 wins over the session's workspace, so a link into a specific workspace behaves as expected.
 
+### Signing in with Google
+
+With `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` set, the sign-in page offers **Continue with Google**
+alongside the password form. Google answers exactly one question — which verified email address is at the
+keyboard — and the account is then this app's own: an existing account is matched by that address, `googleSub`
+is stored so a later change of address still lands on the same account, and a temporary password waiting to be
+changed is considered settled. Google never creates an account, because an account here also decides workspace
+membership; someone with no account is told to ask their administrator, and a deactivated one is refused with
+the same wording as an unknown one.
+
+The handshake is authorization code with PKCE, state and nonce, all three kept in a short-lived http-only
+cookie scoped to `/api/auth/google`, and the id token is verified against Google's published keys before its
+email is believed. Google matches redirect URIs literally, so there is one callback — on the product's own
+hostname — and the button points there even when the sign-in page is being served from a workspace subdomain;
+the workspace comes from the session, as it does after any other sign-in. `GOOGLE_ALLOWED_DOMAINS` narrows
+which email domains may use it.
+
 ### Operator portal
 
 `/super` is for `User.isSuperAdmin` only: create a workspace with its first administrator, suspend or
@@ -213,6 +230,8 @@ accounts carrying a temporary password are sent there until they do.
 | `APP_BUILD`                           | no       | Build stamp on PDFs; set to the deployed commit sha          |
 | `SEED_TENANT_SLUG` / `SEED_TENANT_NAME` | no     | Workspace created by `npm run db:seed`                       |
 | `SEED_ADMIN_*`                        | no       | Bootstrap administrator, used by `npm run db:seed` only      |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | no | Enables **Continue with Google**; without both it is hidden |
+| `GOOGLE_ALLOWED_DOMAINS`              | no       | Comma-separated email domains allowed to use Google sign-in  |
 | `RESEND_API_KEY`                      | no       | Enables email notifications through Resend                   |
 | `EMAIL_FROM`                          | no       | From-address for notifications                               |
 | `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` / `SUPABASE_LOGO_BUCKET` | no | Logo uploads; without them, hosted image URLs still work |
@@ -252,7 +271,11 @@ exactly), `MC_OUT` (default `monte-carlo-report.pdf`).
    - `DIRECT_URL` = direct/session connection, port `5432` (pgbouncer cannot run DDL, so migrations need this)
    - `AUTH_SECRET`, `APP_BASE_URL`, `APP_ROOT_DOMAIN`, and `APP_BUILD=$VERCEL_GIT_COMMIT_SHA`
 3. Point a wildcard domain (`*.agreementcalculator.com`) at the project so workspace subdomains resolve.
-4. Apply the schema and create the first operator from your own machine, with both variables exported:
+4. For Google sign-in, create an OAuth 2.0 **Web application** client in Google Cloud Console, add
+   `https://www.agreementcalculator.com/api/auth/google/callback` (and `http://localhost:3000/api/auth/google/callback`
+   for development) as authorised redirect URIs, and set `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`. The
+   OAuth consent screen needs only the `openid`, `email` and `profile` scopes, none of which require review.
+5. Apply the schema and create the first operator from your own machine, with both variables exported:
 
 ```bash
 npm run db:migrate

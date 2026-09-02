@@ -159,6 +159,12 @@ model User {
   active       Boolean   @default(true)
   mustReset    Boolean   @default(false)
   lastLoginAt  DateTime?
+
+  /// Google's account id (`sub`), set the first time this account signs in with
+  /// Google. Kept alongside the password rather than instead of it: Google is a
+  /// second door into the same account, not a separate kind of account.
+  googleSub    String?   @unique
+
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
