@@ -130,7 +130,7 @@ export function UserAdmin({
                 </p>
               </div>
 
-              <form action={updateAction} className="flex items-center gap-2">
+              <form key={member.role} action={updateAction} className="flex items-center gap-2">
                 <input type="hidden" name="userId" value={member.id} />
                 <select name="role" defaultValue={member.role} className="field w-44 py-1">
                   {ROLES.map((role) => (
