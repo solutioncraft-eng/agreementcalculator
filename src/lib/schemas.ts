@@ -48,8 +48,12 @@ export const cogsItemSchema = z.object({
   label: z.string().trim().min(2).max(80),
   vendor: z.string().trim().max(80).optional().or(z.literal("")),
   unit: unitSchema,
-  /** The offerings this item is part of. An item may serve several. */
-  tierKeys: z.array(tierKeySchema).min(1, "Pick at least one offering.").max(24),
+  /**
+   * The offerings this item is part of. An item may serve several, or none
+   * while the draft is being arranged; publish refuses an active item nobody
+   * carries.
+   */
+  tierKeys: z.array(tierKeySchema).max(24),
   unitCost: z.coerce.number().min(0).max(100_000),
   active: z.coerce.boolean().optional(),
   sortOrder: z.coerce.number().int().min(0).max(999).optional(),
