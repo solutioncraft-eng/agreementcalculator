@@ -1,18 +1,31 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
+import { googleEnabled, googleStartUrl } from "@/lib/google";
 import { slugFromHost } from "@/lib/tenant";
 import { TRIAL_DAYS } from "@/lib/trial";
 import { Logo, LogoMark } from "@/components/logo";
 import { LoginForm } from "./login-form";
 
+/** What went wrong on the way back from Google, in the person's own terms. */
+const GOOGLE_PROBLEMS: Record<string, string | undefined> = {
+  off: "Google sign-in is not switched on for this deployment.",
+  denied: "Google sign-in was cancelled.",
+  failed: "Google sign-in could not be completed. Try again, or use your password.",
+  domain: "That Google account is not on an email domain allowed to sign in here.",
+  nouser:
+    "No Agreement Calculator account uses that Google address. Ask your workspace administrator for an invitation.",
+};
+
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ reset?: string }>;
+  searchParams: Promise<{ reset?: string; google?: string }>;
 }) {
   if (await getCurrentUser()) redirect("/calculator");
-  const justReset = (await searchParams).reset === "1";
+  const params = await searchParams;
+  const justReset = params.reset === "1";
+  const googleProblem = GOOGLE_PROBLEMS[params.google ?? ""];
   // Signing up creates a workspace, so it is offered on the product's own
   // hostname only — a workspace subdomain already belongs to one.
   const onWorkspaceHost = Boolean(await slugFromHost());
@@ -51,7 +64,12 @@ export default async function LoginPage({
               Your password has been updated. Sign in with it now.
             </p>
           ) : null}
-          <LoginForm />
+          {googleProblem ? (
+            <p role="alert" className="mt-4 rounded-brand bg-orange/10 px-3 py-2 text-[13px] font-medium text-orange-dark">
+              {googleProblem}
+            </p>
+          ) : null}
+          <LoginForm googleStartUrl={googleEnabled() ? googleStartUrl() : undefined} />
           {onWorkspaceHost ? null : (
             <p className="mt-6 border-t border-mist pt-4 text-[13px] text-slate">
               No workspace yet?{" "}
