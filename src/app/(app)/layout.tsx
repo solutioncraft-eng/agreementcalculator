@@ -62,7 +62,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <NavMenu
               label="Help"
               items={[
-                { href: "/help/changelog", label: "What's new", hint: "Recent changes to the app" },
+                { href: "/help/guide", label: "Reference guide", hint: "How quotes, approvals and pricing work" },
+          { href: "/help/changelog", label: "What's new", hint: "Recent changes to the app" },
                 { href: "/help/support", label: "Support & requests", hint: "Report a problem or ask for an enhancement" },
               ]}
             />
