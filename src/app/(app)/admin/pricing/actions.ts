@@ -624,33 +624,49 @@ export async function deleteServiceTier(_prev: AdminState, formData: FormData): 
     };
   }
 
-  const items = await db.cogsItemTier.count({
+  // Memberships point at the tier by key, so they are dropped here; an item
+  // left with no offering is reported and publish refuses it until it has one.
+  const memberships = await db.cogsItemTier.findMany({
     where: { tierKey: tier.key, item: { versionId } },
+    include: { item: { include: { tiers: true } } },
   });
-  if (items > 0) {
-    return {
-      error: `Move the ${items} COGS item${items === 1 ? "" : "s"} in ${tier.label} to another offering first.`,
-    };
-  }
+  const orphaned = memberships
+    .filter((membership) => membership.item.active && membership.item.tiers.length === 1)
+    .map((membership) => membership.item.label);
 
-  await db.serviceTier.delete({ where: { id: tierId } });
-  await db.$transaction(
-    tiers
+  await db.$transaction([
+    db.cogsItemTier.deleteMany({ where: { tierKey: tier.key, item: { versionId } } }),
+    db.serviceTier.delete({ where: { id: tierId } }),
+    ...tiers
       .filter((row) => row.id !== tierId)
       .map((row, position) => db.serviceTier.update({ where: { id: row.id }, data: { sortOrder: position } })),
-  );
+  ]);
 
   await audit({
     action: "SERVICE_TIER_DELETED",
     entity: "ServiceTier",
     entityId: tier.key,
     summary: `Offering "${tier.label}" removed from draft ${version.label}`,
-    before: { label: tier.label, description: tier.description, parentKey: tier.parentKey },
+    before: {
+      label: tier.label,
+      description: tier.description,
+      parentKey: tier.parentKey,
+      ownItems: memberships.map((membership) => membership.item.key),
+    },
     tenantId: tenant.id,
     actor: user,
   });
 
   revalidatePath(`/admin/pricing/${versionId}`);
+  if (orphaned.length > 0) {
+    return {
+      ok: `Removed ${tier.label}. ${orphaned.join(", ")} ${
+        orphaned.length === 1 ? "is" : "are"
+      } now carried by no offering — assign or deactivate ${
+        orphaned.length === 1 ? "it" : "them"
+      } before publishing.`,
+    };
+  }
   return { ok: `Removed ${tier.label}.` };
 }
 
