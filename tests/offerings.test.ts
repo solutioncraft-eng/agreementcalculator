@@ -20,6 +20,7 @@ const SETTINGS = {
   maxSgmPct: 70,
   minPerUserFloor: 10,
   addonMultiplier: 4,
+  coManagedLaborMultiplier: 1,
 };
 
 const INPUTS: CalcInputs = {

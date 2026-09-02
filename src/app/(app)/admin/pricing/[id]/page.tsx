@@ -47,6 +47,13 @@ export default async function PricingVersionPage({ params }: { params: Promise<{
           label: tier.label,
           description: tier.description,
           parentKey: tier.parentKey,
+          coManaged: tier.coManaged,
+          override: {
+            perUser: tier.overridePerUser?.toNumber() ?? null,
+            perDevice: tier.overridePerDevice?.toNumber() ?? null,
+            perLocation: tier.overridePerLocation?.toNumber() ?? null,
+            flat: tier.overrideFlat?.toNumber() ?? null,
+          },
         }))}
         items={version.cogsItems.map((item) => ({
           id: item.id,

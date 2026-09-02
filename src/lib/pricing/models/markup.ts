@@ -14,6 +14,7 @@ import {
   belowFloorTriggers,
   bundleFor,
   money,
+  overrideTriggers,
   priceTiers,
   round2,
   type CalcInputs,
@@ -38,6 +39,7 @@ function calculate(
     costMultiplier: 1,
     baseMultiplier: markup,
     addonMultiplier: s.addonMarkup,
+    coManaged: { costMultiplier: 1, baseMultiplier: s.coManagedMarkup },
     bundlePct: bundle.discountPct / 100,
   });
 
@@ -69,7 +71,7 @@ function calculate(
       message: `Minimum per-user floor changed from ${money(s.minPerUserFloor)} to ${money(inputs.perUserFloor)}`,
     });
   }
-  triggers.push(...belowFloorTriggers(tiers, inputs));
+  triggers.push(...belowFloorTriggers(tiers, inputs), ...overrideTriggers(tiers));
   if (inputs.floorOverride) {
     triggers.push({ code: "FLOOR_OVERRIDE", message: "Floor overridden — actual below-floor rate in use" });
   }
@@ -104,6 +106,7 @@ export const markupModel: PricingModelAdapter<MarkupSettings> = {
     minPerUserFloor: 100,
     maxDiscountPct: 15,
     addonMarkup: 2.5,
+    coManagedMarkup: 2.5,
   },
   startingInputs: (s) => ({
     sgmPct: 0,

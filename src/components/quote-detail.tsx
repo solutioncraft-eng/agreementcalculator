@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import type { PricingVersion, QuoteRequest, QuoteReview, User } from "@prisma/client";
-import { achievedSgmPct, money, moneyRounded } from "@/lib/pricing/engine";
+import { achievedSgmPct, money, moneyRounded, standardRateLabel } from "@/lib/pricing/engine";
 import { calculate } from "@/lib/pricing/models";
 import { getConfigForVersion } from "@/lib/pricing/config";
 import type { TenantDb } from "@/lib/db";
@@ -126,11 +126,7 @@ export async function QuoteDetail({ quote, db }: { quote: QuoteWithRelations; db
             ) : null}
             <Row label="Hard cost floor" value={money(tier.costFloor)} strong />
             <Row
-              label={
-                config?.model === "COST_PLUS"
-                  ? `Standard rate at ${result.split.sgmPct}% SGM`
-                  : `Standard rate at ${quote.markupMultiple.toNumber()}× markup`
-              }
+              label={standardRateLabel(tier, result)}
               value={money(tier.standardRate)}
             />
             {tier.discount > 0 ? (

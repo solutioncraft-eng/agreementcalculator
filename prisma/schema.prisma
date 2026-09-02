@@ -280,6 +280,19 @@ model ServiceTier {
   /// it is priced as a base offering rather than as a step up from another.
   parentKey String?
 
+  /// Delivered alongside the client's own IT staff. The base tools of a
+  /// co-managed chain are priced with the version's co-managed lever (a lower
+  /// imputed labor multiple, or a lower markup) instead of the main one.
+  coManaged Boolean @default(false)
+
+  /// Optional flat-rate override: when any of these is set, the offering's
+  /// standard rate is the sum of them times the quote's environment instead of
+  /// the model's formula. The COGS cost floor still applies underneath.
+  overridePerUser     Decimal? @db.Decimal(10, 4)
+  overridePerDevice   Decimal? @db.Decimal(10, 4)
+  overridePerLocation Decimal? @db.Decimal(10, 4)
+  overrideFlat        Decimal? @db.Decimal(10, 4)
+
   @@unique([versionId, key])
   @@index([versionId])
   @@index([tenantId])

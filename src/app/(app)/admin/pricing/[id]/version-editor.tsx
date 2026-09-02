@@ -51,6 +51,34 @@ interface TierView {
   label: string;
   description: string | null;
   parentKey: string | null;
+  coManaged: boolean;
+  override: TierOverrideView;
+}
+
+/** Flat-rate override components as stored; null means the component is unset. */
+interface TierOverrideView {
+  perUser: number | null;
+  perDevice: number | null;
+  perLocation: number | null;
+  flat: number | null;
+}
+
+const OVERRIDE_FIELDS: { key: keyof TierOverrideView; name: string; label: string; per: string }[] = [
+  { key: "perUser", name: "overridePerUser", label: "Per user", per: "user" },
+  { key: "perDevice", name: "overridePerDevice", label: "Per device", per: "device" },
+  { key: "perLocation", name: "overridePerLocation", label: "Per location", per: "location" },
+  { key: "flat", name: "overrideFlat", label: "Flat per month", per: "mo" },
+];
+
+function hasOverride(override: TierOverrideView): boolean {
+  return OVERRIDE_FIELDS.some((field) => (override[field.key] ?? 0) > 0);
+}
+
+/** "$12/user + $5/device" for the offering list. */
+function describeOverride(override: TierOverrideView): string {
+  return OVERRIDE_FIELDS.filter((field) => (override[field.key] ?? 0) > 0)
+    .map((field) => `${money(override[field.key] ?? 0)}/${field.per}`)
+    .join(" + ");
 }
 
 interface ItemView {
@@ -301,6 +329,10 @@ export function VersionEditor({
                       {tier.label}
                     </p>
                     <p className="text-[13px] text-slate">{tier.description ?? "—"}</p>
+                    <p className="font-display text-[11px] uppercase tracking-eyebrow text-slate">
+                      {chainOf(tiers, tier.key)[0]?.coManaged ? "Co-managed" : "Fully managed"}
+                      {hasOverride(tier.override) ? ` · flat rate ${describeOverride(tier.override)}` : ""}
+                    </p>
                     <p className="font-mono text-[11px] text-slate">{tier.key}</p>
                     <p className="mt-1 font-mono text-[11px] text-slate">
                       {costing.get(tier.key)?.own.length ?? 0} own ·{" "}
@@ -765,6 +797,10 @@ function TierForm({
   const [addingItem, setAddingItem] = useState(false);
   const name = tier?.label ?? "this offering";
   const parentLabel = tiers.find((candidate) => candidate.key === parentKey)?.label ?? parentKey;
+  // Delivery is decided at the root of the chain, so a child only reports it.
+  const root = parentKey ? chainOf(tiers, parentKey)[0] : undefined;
+  const rootLabel = root?.label ?? parentLabel;
+  const rootCoManaged = root?.coManaged ?? false;
   // Items reached through the chosen parent chain arrive with it, so they are
   // shown as inherited rather than offered for ticking.
   const inheritedKeys = parentKey ? chainOf(tiers, parentKey).map((member) => member.key) : [];
@@ -820,6 +856,49 @@ function TierForm({
               Cancel
             </button>
           ) : null}
+        </div>
+        <div className="md:col-span-4 border-t border-mist pt-3">
+          <p className="label">How is it priced?</p>
+          {parentKey ? (
+            <p className="mt-1 text-[13px] text-slate">
+              Delivery follows {rootLabel}: {rootCoManaged ? "co-managed" : "fully managed"}. Add-on items are
+              priced with the add-on lever either way.
+            </p>
+          ) : (
+            <label className="mt-1 flex items-start gap-2 text-[13px] text-navy">
+              <input
+                type="checkbox"
+                name="coManaged"
+                defaultChecked={tier?.coManaged ?? false}
+                className="mt-[3px] h-4 w-4 accent-orange"
+              />
+              <span>
+                Co-managed — delivered alongside the client&apos;s own IT staff.
+                <span className="block text-slate">
+                  Its tools are priced with the version&apos;s co-managed lever instead of the main one, and so
+                  are the offerings that build on it.
+                </span>
+              </span>
+            </label>
+          )}
+          <p className="mt-3 text-[13px] text-slate">
+            Optional flat rate. Leave blank to price from cost; fill in any of these and {name} sells for
+            their sum instead of the formula. The COGS cost floor still applies, and a rate under it is
+            flagged for review.
+          </p>
+          <div className="mt-2 grid gap-3 sm:grid-cols-4">
+            {OVERRIDE_FIELDS.map((field) => (
+              <Field
+                key={field.name}
+                name={field.name}
+                label={`${field.label} ($)`}
+                type="number"
+                step="0.01"
+                defaultValue={tier?.override[field.key] ?? ""}
+                placeholder="—"
+              />
+            ))}
+          </div>
         </div>
         <div className="md:col-span-4 border-t border-mist pt-3">
           <input type="hidden" name="chooseItems" value="1" />

@@ -57,6 +57,13 @@ export function toConfig(version: VersionWithChildren): PricingConfig {
       description: tier.description,
       sortOrder: tier.sortOrder,
       parentKey: tier.parentKey,
+      coManaged: tier.coManaged,
+      rateOverride: {
+        perUser: tier.overridePerUser?.toNumber() ?? 0,
+        perDevice: tier.overridePerDevice?.toNumber() ?? 0,
+        perLocation: tier.overridePerLocation?.toNumber() ?? 0,
+        flat: tier.overrideFlat?.toNumber() ?? 0,
+      },
     }));
 
   const base = {
