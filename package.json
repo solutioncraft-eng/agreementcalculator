@@ -16,6 +16,7 @@
     "db:seed": "prisma db seed",
     "db:purge": "tsx scripts/purge-expired-quotes.ts",
     "admin:create": "tsx scripts/create-admin.ts",
+    "import:infinit-calc": "tsx scripts/import-infinit-calc.ts",
     "sim:pricing": "esbuild scripts/monte-carlo.mts --bundle --platform=node --format=esm --jsx=automatic --packages=external --log-level=warning --outfile=node_modules/.cache/monte-carlo/run.mjs && node node_modules/.cache/monte-carlo/run.mjs",
     "test": "tsx --test tests/*.test.ts"
   },
