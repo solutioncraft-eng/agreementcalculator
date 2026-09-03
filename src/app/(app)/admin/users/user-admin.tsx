@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import clsx from "clsx";
+import { LocalTime } from "@/components/local-time";
 import {
   inviteMember,
   removeMember,
@@ -124,9 +125,13 @@ export function UserAdmin({
                 </p>
                 <p className="text-slate">{member.email}</p>
                 <p className="mt-1 font-mono text-[11px] text-slate">
-                  {member.lastLoginAt
-                    ? `Last sign-in ${member.lastLoginAt.slice(0, 16).replace("T", " ")} UTC`
-                    : "Never signed in"}
+                  {member.lastLoginAt ? (
+                    <>
+                      Last sign-in <LocalTime iso={member.lastLoginAt} />
+                    </>
+                  ) : (
+                    "Never signed in"
+                  )}
                 </p>
               </div>
 

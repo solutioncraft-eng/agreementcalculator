@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import clsx from "clsx";
+import { LocalTime } from "@/components/local-time";
 import { money } from "@/lib/pricing/engine";
 import { DEFAULT_INPUTS } from "@/lib/pricing/defaults";
 import {
@@ -241,9 +242,12 @@ export function VersionEditor({
             {editable
               ? "Draft — edit freely. Publishing freezes these numbers permanently."
               : `${version.status} — immutable. Create a new draft to change pricing.`}
-            {version.publishedAt
-              ? ` Published ${version.publishedAt.slice(0, 16).replace("T", " ")} UTC by ${version.publishedBy}.`
-              : ""}
+            {version.publishedAt ? (
+              <>
+                {" "}
+                Published <LocalTime iso={version.publishedAt} /> by {version.publishedBy}.
+              </>
+            ) : null}
           </p>
         </div>
         {editable ? (

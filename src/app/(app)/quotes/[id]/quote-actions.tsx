@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import type { QuoteStatus } from "@prisma/client";
 import { downloadExport } from "@/lib/export-client";
+import { LocalTime } from "@/components/local-time";
 import { withdraw, type DecisionState } from "../../reviews/actions";
 
 interface ExportRow {
@@ -98,7 +99,7 @@ export function QuoteActions({
           <ul className="mt-2 space-y-1 font-mono text-[11px] text-slate">
             {exports.map((row) => (
               <li key={row.exportId}>
-                {row.exportId} · {row.docType} · {row.by} · {row.at.slice(0, 16).replace("T", " ")} UTC
+                {row.exportId} · {row.docType} · {row.by} · <LocalTime iso={row.at} />
                 {row.checksum ? ` · sha256 ${row.checksum.slice(0, 16)}` : ""}
               </li>
             ))}
