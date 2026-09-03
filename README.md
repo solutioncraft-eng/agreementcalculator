@@ -225,6 +225,21 @@ Everyone else is added from **Admin → People**, which emails a temporary passw
 otherwise shows it once for you to hand over. Anyone can change their own password at `/account/password`;
 accounts carrying a temporary password are sent there until they do.
 
+### Importing an InfinIT Calculator database
+
+To bring a single-tenant InfinIT Calculator deployment into one workspace, dump its database and import
+it (dry run first; `--apply` writes everything in one transaction):
+
+```bash
+SUPABASE_ACCESS_TOKEN=... node scripts/dump-infinit-calc.mjs <supabase-project-ref> dump.json
+npm run import:infinit-calc -- dump.json infinit
+npm run import:infinit-calc -- dump.json infinit --apply
+```
+
+Users are matched by email (new accounts keep their old password), old pricing versions arrive as archived
+versions with Advantage/Pinnacle as offerings, and quotes, reviews, PDF export records and audit history follow.
+The dump contains password hashes — keep it out of git and delete it afterwards.
+
 ### Environment variables
 
 | Variable                              | Required | Purpose                                                     |
