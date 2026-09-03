@@ -162,7 +162,18 @@ export function UserAdmin({
                     Reset password
                   </button>
                 </form>
-                <form action={removeAction}>
+                <form
+                  action={removeAction}
+                  onSubmit={(event) => {
+                    if (
+                      !window.confirm(
+                        `Remove ${member.name} (${member.email}) from ${workspaceName}? They lose access to this workspace; their quotes and history stay.`,
+                      )
+                    ) {
+                      event.preventDefault();
+                    }
+                  }}
+                >
                   <input type="hidden" name="userId" value={member.id} />
                   <button type="submit" className="btn-ghost btn-sm text-orange-dark">
                     Remove from workspace
