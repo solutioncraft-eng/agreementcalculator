@@ -20,6 +20,21 @@ export function absoluteUrl(path: string): string {
 }
 
 /**
+ * Ownership tokens for the search consoles, emitted as `<meta name="…">` tags
+ * on every page. Each accepts the bare token or the whole `content="…"` tag
+ * value the console hands out, so it can be pasted in without trimming.
+ */
+export function siteVerification(): { google?: string; other?: Record<string, string> } {
+  const token = (value: string | undefined) => value?.match(/content="([^"]+)"/)?.[1] ?? value?.trim() ?? "";
+  const google = token(process.env.GOOGLE_SITE_VERIFICATION);
+  const bing = token(process.env.BING_SITE_VERIFICATION);
+  return {
+    ...(google ? { google } : {}),
+    ...(bing ? { other: { "msvalidate.01": bing } } : {}),
+  };
+}
+
+/**
  * The questions a buyer actually types into a search engine before they trust a
  * pricing tool with their agreements. Rendered on the page *and* emitted as
  * `FAQPage` structured data from the same source, because schema that describes

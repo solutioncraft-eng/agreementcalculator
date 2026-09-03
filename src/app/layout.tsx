@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Archivo, IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
-import { PRODUCT_NAME, siteUrl } from "@/lib/seo";
+import { PRODUCT_NAME, siteUrl, siteVerification } from "@/lib/seo";
 import "./globals.css";
 
 const archivo = Archivo({
@@ -39,6 +39,7 @@ export const metadata: Metadata = {
     locale: "en_US",
   },
   twitter: { card: "summary_large_image" },
+  verification: siteVerification(),
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
