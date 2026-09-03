@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import clsx from "clsx";
+import { LocalTime } from "@/components/local-time";
 import {
   inviteMember,
   removeMember,
@@ -124,9 +125,13 @@ export function UserAdmin({
                 </p>
                 <p className="text-slate">{member.email}</p>
                 <p className="mt-1 font-mono text-[11px] text-slate">
-                  {member.lastLoginAt
-                    ? `Last sign-in ${member.lastLoginAt.slice(0, 16).replace("T", " ")} UTC`
-                    : "Never signed in"}
+                  {member.lastLoginAt ? (
+                    <>
+                      Last sign-in <LocalTime iso={member.lastLoginAt} />
+                    </>
+                  ) : (
+                    "Never signed in"
+                  )}
                 </p>
               </div>
 
@@ -157,7 +162,18 @@ export function UserAdmin({
                     Reset password
                   </button>
                 </form>
-                <form action={removeAction}>
+                <form
+                  action={removeAction}
+                  onSubmit={(event) => {
+                    if (
+                      !window.confirm(
+                        `Remove ${member.name} (${member.email}) from ${workspaceName}? They lose access to this workspace; their quotes and history stay.`,
+                      )
+                    ) {
+                      event.preventDefault();
+                    }
+                  }}
+                >
                   <input type="hidden" name="userId" value={member.id} />
                   <button type="submit" className="btn-ghost btn-sm text-orange-dark">
                     Remove from workspace
