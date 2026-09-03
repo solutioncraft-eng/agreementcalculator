@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { FAQ, absoluteUrl, landingJsonLd, siteUrl } from "../src/lib/seo";
+import { FAQ, absoluteUrl, landingJsonLd, siteUrl, siteVerification } from "../src/lib/seo";
 
 function withEnv(vars: Record<string, string | undefined>, run: () => void) {
   const previous: Record<string, string | undefined> = {};
@@ -30,6 +30,24 @@ test("the root domain is used when no base URL is configured", () => {
   withEnv({ APP_BASE_URL: undefined, APP_ROOT_DOMAIN: "agreementcalculator.com" }, () => {
     assert.equal(siteUrl(), "https://agreementcalculator.com");
   });
+});
+
+test("search console tokens are emitted only when configured, whether pasted bare or as the whole tag", () => {
+  withEnv({ GOOGLE_SITE_VERIFICATION: undefined, BING_SITE_VERIFICATION: undefined }, () => {
+    assert.deepEqual(siteVerification(), {});
+  });
+  withEnv({ GOOGLE_SITE_VERIFICATION: " abc123 ", BING_SITE_VERIFICATION: undefined }, () => {
+    assert.deepEqual(siteVerification(), { google: "abc123" });
+  });
+  withEnv(
+    {
+      GOOGLE_SITE_VERIFICATION: '<meta name="google-site-verification" content="tok-en" />',
+      BING_SITE_VERIFICATION: "B1NG",
+    },
+    () => {
+      assert.deepEqual(siteVerification(), { google: "tok-en", other: { "msvalidate.01": "B1NG" } });
+    },
+  );
 });
 
 test("structured data is valid JSON describing the product, its price and the page's own FAQ", () => {
