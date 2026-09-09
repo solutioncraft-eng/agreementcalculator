@@ -26,6 +26,9 @@ export const styles = StyleSheet.create({
   eyebrow: { fontSize: 7.5, letterSpacing: 1.2, color: brand.orange, fontFamily: "Helvetica-Bold" },
   title: { fontSize: 19, color: brand.navy, fontFamily: "Helvetica-Bold", marginTop: 6 },
   metaLine: { fontSize: 8.5, color: brand.slate },
+  /** Customer logo beside the customer's name, on a customer-facing quote. */
+  customerBlock: { flexDirection: "row", alignItems: "center" },
+  customerLogo: { height: 22, marginRight: 8, marginTop: 6 },
   confidential: {
     marginTop: 14,
     backgroundColor: brand.navy,

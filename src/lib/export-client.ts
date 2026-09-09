@@ -8,6 +8,18 @@ export interface ExportRequest {
   notes?: string;
   inputs?: CalcInputs;
   quoteId?: string;
+  /**
+   * Customer details from MSP Cadence, when the quote is being built as a
+   * customer-facing document. Presentation only: they enrich the PDF header and
+   * change nothing about pricing, approval or the export record.
+   */
+  customerLogoUrl?: string;
+  customerWebsite?: string;
+  customerContactPhone?: string;
+  customerTechnicalContactName?: string;
+  customerTechnicalContactEmail?: string;
+  customerExecutiveContactName?: string;
+  customerExecutiveContactEmail?: string;
 }
 
 /**

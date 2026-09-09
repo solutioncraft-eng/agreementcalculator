@@ -247,6 +247,7 @@ The dump contains password hashes — keep it out of git and delete it afterward
 | `DATABASE_URL`                        | yes      | PostgreSQL connection string used at runtime (pooled)        |
 | `DIRECT_URL`                          | yes      | Unpooled connection used for migrations; same value locally  |
 | `AUTH_SECRET`                         | yes      | Session JWT signing key, 32+ random characters               |
+| `INTEGRATION_ENCRYPTION_KEY`          | only with MSP Cadence | AES-256-GCM key (32 bytes, base64) encrypting stored integration secrets at rest |
 | `APP_BASE_URL`                        | no       | Absolute base URL used in notification emails                |
 | `APP_ROOT_DOMAIN`                     | no       | Root domain workspaces are subdomains of; defaults to the `APP_BASE_URL` host |
 | `APP_BUILD`                           | no       | Build stamp on PDFs; set to the deployed commit sha          |

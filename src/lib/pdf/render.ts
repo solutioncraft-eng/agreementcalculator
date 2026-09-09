@@ -33,6 +33,22 @@ export async function workspaceLogo(logoUrl: string | null): Promise<Buffer | un
   }
 }
 
+/**
+ * The customer's own logo, for a customer-facing quote. Unlike a workspace
+ * logo there is no fallback mark: a customer with no logo simply reads as their
+ * name, exactly as an ordinary export does.
+ */
+export async function customerLogo(logoUrl: string | null | undefined): Promise<Buffer | undefined> {
+  if (!logoUrl) return undefined;
+  try {
+    const response = await fetch(logoUrl, { cache: "force-cache" });
+    if (!response.ok) return undefined;
+    return Buffer.from(await response.arrayBuffer());
+  } catch {
+    return undefined;
+  }
+}
+
 /// Human-typable export id that ties a PDF to its export log row.
 export function newExportId(): string {
   const now = new Date();
