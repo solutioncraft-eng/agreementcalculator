@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
 import type { Customer } from "@/lib/mspcadence";
@@ -467,22 +467,17 @@ export function CalculatorClient({
                 <label className="label" htmlFor="clientName">
                   Client name
                 </label>
-                <input
-                  id="clientName"
+                <ClientNameField
                   value={clientName}
-                  onChange={(e) => {
-                    setClientName(e.target.value);
+                  connected={customerDirectory}
+                  canAdminister={canAdminister}
+                  customer={customer}
+                  onChange={(value) => {
+                    setClientName(value);
                     // Typing over a picked customer means the header goes back
                     // to the plain one; the two must not disagree.
                     setCustomer(null);
                   }}
-                  placeholder="Acme Manufacturing"
-                  className="field mt-1"
-                />
-                <CustomerPicker
-                  connected={customerDirectory}
-                  canAdminister={canAdminister}
-                  customer={customer}
                   onPick={(picked) => {
                     setCustomer(picked);
                     setClientName(picked.name);
@@ -608,59 +603,174 @@ function Counter({
 }
 
 /**
- * Turns a plain quote into a customer-facing one by pulling the customer's own
- * logo, website and contacts from MSP Cadence. Shown but inert when the
- * workspace has no MSP Cadence connection, so the capability is discoverable.
+ * The client-name box. With MSP Cadence connected it is a typeahead: typing
+ * searches the customer directory and picking a match fills in the name plus
+ * the logo, website and contacts for a customer-facing quote. Without a
+ * connection it is a plain text field with a hint on how to enable the lookup.
  */
-function CustomerPicker({
+function ClientNameField({
+  value,
   connected,
   canAdminister,
   customer,
+  onChange,
   onPick,
   onClear,
 }: {
+  value: string;
   connected: boolean;
   canAdminister: boolean;
   customer: Customer | null;
+  onChange: (value: string) => void;
   onPick: (customer: Customer) => void;
   onClear: () => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
   const [results, setResults] = useState<Customer[]>([]);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+  const [highlight, setHighlight] = useState(0);
+  const requestId = useRef(0);
 
-  async function search() {
-    setSearching(true);
-    setError(null);
-    try {
-      const response = await fetch(
-        `/api/integrations/mspcadence/customers?q=${encodeURIComponent(query)}`,
-      );
-      const body = await response.json();
-      if (!response.ok) {
-        setError(typeof body?.error === "string" ? body.error : "Customer search failed.");
-        setResults([]);
-        return;
-      }
-      setResults(Array.isArray(body?.customers) ? body.customers : []);
-    } catch {
-      setError("Customer search failed.");
+  const query = value.trim();
+  const searchable = connected && !customer && query.length >= 2;
+
+  useEffect(() => {
+    if (!searchable) {
       setResults([]);
-    } finally {
+      setError(null);
       setSearching(false);
+      return;
     }
+    const id = ++requestId.current;
+    setSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetch(`/api/integrations/mspcadence/customers?q=${encodeURIComponent(query)}`);
+        const body = await response.json();
+        if (id !== requestId.current) return;
+        if (!response.ok) {
+          setError(typeof body?.error === "string" ? body.error : "Customer search failed.");
+          setResults([]);
+        } else {
+          setError(null);
+          setResults(Array.isArray(body?.customers) ? body.customers : []);
+          setHighlight(0);
+        }
+      } catch {
+        if (id !== requestId.current) return;
+        setError("Customer search failed.");
+        setResults([]);
+      } finally {
+        if (id === requestId.current) setSearching(false);
+      }
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [searchable, query]);
+
+  const showList = open && searchable;
+
+  function pick(found: Customer) {
+    onPick(found);
+    setOpen(false);
+    setResults([]);
   }
 
-  if (!connected) {
-    return (
-      <div className="mt-3 rounded-brand border border-dashed border-mist p-3">
-        <button type="button" disabled className="btn-ghost btn-sm opacity-50" aria-disabled>
-          Create customer-facing quote
-        </button>
-        <p className="mt-2 text-[12px] text-slate">
-          Connect MSP Cadence to build customer-facing quotes.{" "}
+  return (
+    <div className="relative">
+      <input
+        id="clientName"
+        value={value}
+        onChange={(e) => {
+          onChange(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 120)}
+        onKeyDown={(e) => {
+          if (!showList || !results.length) return;
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            setHighlight((h) => Math.min(h + 1, results.length - 1));
+          } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            setHighlight((h) => Math.max(h - 1, 0));
+          } else if (e.key === "Enter") {
+            e.preventDefault();
+            pick(results[highlight]);
+          } else if (e.key === "Escape") {
+            setOpen(false);
+          }
+        }}
+        placeholder={connected ? "Start typing to search MSP Cadence customers" : "Acme Manufacturing"}
+        autoComplete="off"
+        role={connected ? "combobox" : undefined}
+        aria-expanded={connected ? showList : undefined}
+        aria-controls={connected ? "clientNameResults" : undefined}
+        className="field mt-1"
+      />
+
+      {showList ? (
+        <ul
+          id="clientNameResults"
+          role="listbox"
+          className="absolute left-0 right-0 z-10 mt-1 max-h-64 overflow-auto rounded-brand border border-mist bg-white p-1 shadow-lg"
+        >
+          {results.map((found, i) => (
+            <li key={found.id} role="option" aria-selected={i === highlight}>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => pick(found)}
+                onMouseEnter={() => setHighlight(i)}
+                className={clsx(
+                  "flex w-full items-center gap-2 rounded-brand px-2 py-1.5 text-left text-[13px]",
+                  i === highlight ? "bg-paper" : "hover:bg-paper",
+                )}
+              >
+                {found.logoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={found.logoUrl} alt="" className="h-5 w-5 rounded object-contain" />
+                ) : (
+                  <span className="h-5 w-5 rounded bg-mist" />
+                )}
+                <span className="truncate">{found.name}</span>
+                {found.website ? <span className="truncate text-slate"> · {found.website}</span> : null}
+              </button>
+            </li>
+          ))}
+          {searching ? <li className="px-2 py-1.5 text-[12px] text-slate">Searching MSP Cadence…</li> : null}
+          {!searching && error ? <li className="px-2 py-1.5 text-[12px] text-orange">{error}</li> : null}
+          {!searching && !error && !results.length ? (
+            <li className="px-2 py-1.5 text-[12px] text-slate">
+              No MSP Cadence customer matches “{query}” — the name will be used as typed.
+            </li>
+          ) : null}
+        </ul>
+      ) : null}
+
+      {customer ? (
+        <div className="mt-3 rounded-brand border border-mist p-3">
+          <p className="eyebrow">Customer-facing quote</p>
+          <div className="mt-1 flex items-center gap-2">
+            {customer.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={customer.logoUrl} alt="" className="h-6 w-6 rounded object-contain" />
+            ) : null}
+            <p className="text-[13px] text-navy">{customer.name}</p>
+          </div>
+          {customer.website ? <p className="text-[12px] text-slate">{customer.website}</p> : null}
+          <button type="button" onClick={onClear} className="mt-2 text-[12px] text-slate underline">
+            Remove customer details
+          </button>
+        </div>
+      ) : connected ? (
+        <p className="mt-1 text-[12px] text-slate">
+          Pick a customer to add their logo, website and contacts to the PDF, or type any name.
+        </p>
+      ) : (
+        <p className="mt-1 text-[12px] text-slate">
+          Connect MSP Cadence to pick customers here.{" "}
           {canAdminister ? (
             <Link href="/admin/integrations" className="underline">
               Settings → Integrations
@@ -669,84 +779,7 @@ function CustomerPicker({
             "An administrator can set this up under Settings → Integrations."
           )}
         </p>
-      </div>
-    );
-  }
-
-  if (customer) {
-    return (
-      <div className="mt-3 rounded-brand border border-mist p-3">
-        <p className="eyebrow">Customer-facing quote</p>
-        <p className="mt-1 text-[13px] text-navy">{customer.name}</p>
-        {customer.website ? <p className="text-[12px] text-slate">{customer.website}</p> : null}
-        <button
-          type="button"
-          onClick={() => {
-            onClear();
-            setOpen(false);
-          }}
-          className="mt-2 text-[12px] text-slate underline"
-        >
-          Remove customer details
-        </button>
-      </div>
-    );
-  }
-
-  if (!open) {
-    return (
-      <button type="button" onClick={() => setOpen(true)} className="btn-ghost btn-sm mt-3">
-        Create customer-facing quote
-      </button>
-    );
-  }
-
-  return (
-    <div className="mt-3 space-y-2 rounded-brand border border-mist p-3">
-      <label className="eyebrow" htmlFor="customerSearch">
-        Search MSP Cadence customers
-      </label>
-      <div className="flex gap-2">
-        <input
-          id="customerSearch"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              void search();
-            }
-          }}
-          placeholder="Acme"
-          className="field"
-        />
-        <button type="button" onClick={() => void search()} disabled={searching} className="btn-ghost btn-sm">
-          {searching ? "Searching…" : "Search"}
-        </button>
-      </div>
-      {error ? <p className="text-[12px] text-orange">{error}</p> : null}
-      {results.length ? (
-        <ul className="space-y-1">
-          {results.map((found) => (
-            <li key={found.id}>
-              <button
-                type="button"
-                onClick={() => {
-                  onPick(found);
-                  setOpen(false);
-                }}
-                className="w-full rounded-brand px-2 py-1 text-left text-[13px] hover:bg-paper"
-              >
-                {found.name}
-                {found.website ? <span className="text-slate"> · {found.website}</span> : null}
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {!searching && !error && !results.length ? (
-        <p className="text-[12px] text-slate">Search by customer name to pull logo, website and contacts.</p>
-      ) : null}
+      )}
     </div>
   );
 }
