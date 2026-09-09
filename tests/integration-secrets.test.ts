@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import test from "node:test";
 import { CryptoError, decryptSecret, encryptSecret, encryptionConfigured } from "../src/lib/crypto";
-import { integrationConfigured } from "../src/lib/mspcadence";
+import { integrationConfigured, parseApiKey } from "../src/lib/mspcadence";
 
 const KEY = randomBytes(32).toString("base64");
 
@@ -62,4 +62,16 @@ test("a workspace counts as connected only with a url, an encrypted key and a te
   assert.equal(integrationConfigured({ ...full, mspCadenceKeyEnc: null }), false);
   assert.equal(integrationConfigured({ ...full, mspCadenceUrl: null }), false);
   assert.equal(integrationConfigured({ ...full, mspCadenceTenantId: null }), false);
+});
+
+test("parseApiKey derives the directory URL from a well-formed key and rejects the rest", () => {
+  const key = `mspc_rifynfswkfuzfwmrfnif_${"ab".repeat(24)}`;
+  assert.deepEqual(parseApiKey(`  ${key}\n`), {
+    key,
+    url: "https://rifynfswkfuzfwmrfnif.supabase.co/functions/v1/quote-customer-directory",
+  });
+  assert.equal(parseApiKey("not-a-key"), null);
+  assert.equal(parseApiKey("mspc_short_abc"), null);
+  assert.equal(parseApiKey(`mspc_evil.example.com/_${"ab".repeat(24)}`), null);
+  assert.equal(parseApiKey(`mspc_rifynfswkfuzfwmrfnif_${"zz".repeat(24)}`), null);
 });

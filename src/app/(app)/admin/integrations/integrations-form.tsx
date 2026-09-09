@@ -1,13 +1,11 @@
 "use client";
 
-import { useActionState } from "react";
-import { saveIntegration, type IntegrationsState } from "./actions";
+import { useActionState, useState, useTransition } from "react";
+import { disconnectIntegration, saveIntegration, type IntegrationsState } from "./actions";
 
 interface IntegrationConfig {
-  url: string | null;
-  tenantId: string | null;
-  /** Whether a key is stored. The key itself is never sent to the browser. */
-  keySet: boolean;
+  /** Derived from the key on connect; shown so admins can see which deployment they are linked to. */
+  host: string | null;
   connected: boolean;
 }
 
@@ -19,9 +17,15 @@ export function IntegrationsForm({
   encryptionConfigured: boolean;
 }) {
   const [state, action, pending] = useActionState<IntegrationsState, FormData>(saveIntegration, {});
+  const [disconnectState, setDisconnectState] = useState<IntegrationsState>({});
+  const [disconnecting, startDisconnect] = useTransition();
+  const [replacing, setReplacing] = useState(false);
+
+  const showKeyField = !config.connected || replacing;
+  const message = disconnectState.error || disconnectState.ok ? disconnectState : state;
 
   return (
-    <form action={action} className="space-y-6">
+    <div className="space-y-6">
       <section className="card space-y-4">
         <div className="flex items-center justify-between gap-4">
           <h2 className="text-[20px]">MSP Cadence</h2>
@@ -37,65 +41,74 @@ export function IntegrationsForm({
           </p>
         ) : null}
 
-        <div>
-          <label className="label" htmlFor="mspCadenceUrl">
-            Directory function URL
-          </label>
-          <input
-            id="mspCadenceUrl"
-            name="mspCadenceUrl"
-            type="url"
-            defaultValue={config.url ?? ""}
-            placeholder="https://your-project.supabase.co/functions/v1/quote-customer-directory"
-            className="field mt-1 font-mono text-[13px]"
-          />
-        </div>
-
-        <div>
-          <label className="label" htmlFor="mspCadenceTenantId">
-            MSP Cadence tenant id
-          </label>
-          <input
-            id="mspCadenceTenantId"
-            name="mspCadenceTenantId"
-            defaultValue={config.tenantId ?? ""}
-            placeholder="00000000-0000-0000-0000-000000000000"
-            className="field mt-1 font-mono text-[13px]"
-          />
-          <p className="mt-1 text-[12px] text-slate">
-            Which MSP Cadence workspace this one reads customers from.
+        {config.connected ? (
+          <p className="text-[13px] text-slate">
+            Reading customers from <span className="font-mono text-ink">{config.host}</span>. The key is stored
+            encrypted and never shown again.
           </p>
-        </div>
+        ) : (
+          <ol className="list-decimal space-y-1 pl-5 text-[13px] text-slate">
+            <li>
+              In MSP Cadence open <span className="text-ink">Settings → Integrations → Agreement Calculator</span>{" "}
+              and click <span className="text-ink">Generate key</span>.
+            </li>
+            <li>Copy the key (it is only shown once) and paste it below.</li>
+          </ol>
+        )}
 
-        <div>
-          <label className="label" htmlFor="mspCadenceKey">
-            Directory key
-          </label>
-          <input
-            id="mspCadenceKey"
-            name="mspCadenceKey"
-            type="password"
-            autoComplete="off"
-            placeholder={config.keySet ? "•••••••• (stored) — type to replace" : "Paste the key from MSP Cadence"}
-            className="field mt-1 font-mono text-[13px]"
-          />
-          <p className="mt-1 text-[12px] text-slate">
-            Stored encrypted (AES-256-GCM) and never shown again — leave it blank to keep the current key.
-            It is the <code>QUOTE_DIRECTORY_KEY</code> secret set on your MSP Cadence project.
-          </p>
-        </div>
-
-        <p className="text-[12px] text-slate">
-          Clear all three fields and save to disconnect.
-        </p>
+        {showKeyField ? (
+          <form action={action} className="space-y-3">
+            <div>
+              <label className="label" htmlFor="mspCadenceKey">
+                MSP Cadence API key
+              </label>
+              <input
+                id="mspCadenceKey"
+                name="mspCadenceKey"
+                type="password"
+                autoComplete="off"
+                required
+                placeholder="mspc_…"
+                className="field mt-1 font-mono text-[13px]"
+              />
+              <p className="mt-1 text-[12px] text-slate">
+                The key identifies your MSP Cadence deployment and workspace, so nothing else needs to be entered.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <button type="submit" className="btn-primary" disabled={pending || !encryptionConfigured}>
+                {pending ? "Checking key…" : config.connected ? "Replace key" : "Connect"}
+              </button>
+              {replacing ? (
+                <button type="button" className="btn-ghost" onClick={() => setReplacing(false)}>
+                  Cancel
+                </button>
+              ) : null}
+            </div>
+          </form>
+        ) : (
+          <div className="flex items-center gap-3">
+            <button type="button" className="btn-ghost" onClick={() => setReplacing(true)}>
+              Replace key
+            </button>
+            <button
+              type="button"
+              className="btn-ghost"
+              disabled={disconnecting}
+              onClick={() =>
+                startDisconnect(async () => {
+                  setDisconnectState(await disconnectIntegration());
+                })
+              }
+            >
+              {disconnecting ? "Disconnecting…" : "Disconnect"}
+            </button>
+          </div>
+        )}
       </section>
 
-      {state.error ? <p className="text-[13px] font-medium text-orange">{state.error}</p> : null}
-      {state.ok ? <p className="text-[13px] font-medium text-navy">{state.ok}</p> : null}
-
-      <button type="submit" className="btn-primary" disabled={pending}>
-        {pending ? "Saving…" : "Save connection"}
-      </button>
-    </form>
+      {message.error ? <p className="text-[13px] font-medium text-orange">{message.error}</p> : null}
+      {message.ok ? <p className="text-[13px] font-medium text-navy">{message.ok}</p> : null}
+    </div>
   );
 }

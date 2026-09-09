@@ -32,6 +32,19 @@ export interface Customer {
 
 export class MspCadenceError extends Error {}
 
+/**
+ * An MSP Cadence API key looks like `mspc_<supabase project ref>_<48 hex>`.
+ * The project ref names the deployment, so the directory function URL can be
+ * derived from the key alone and connecting is a single paste. Returns null
+ * for anything that is not shaped like a key.
+ */
+export function parseApiKey(raw: string): { key: string; url: string } | null {
+  const key = raw.trim();
+  const match = /^mspc_([a-z0-9]{20})_([0-9a-f]{48})$/.exec(key);
+  if (!match) return null;
+  return { key, url: `https://${match[1]}.supabase.co/functions/v1/quote-customer-directory` };
+}
+
 /** True when the workspace has all three settings, so the picker can be used. */
 export function integrationConfigured(tenant: IntegrationTenant): boolean {
   return Boolean(tenant.mspCadenceUrl && tenant.mspCadenceKeyEnc && tenant.mspCadenceTenantId);
@@ -122,6 +135,35 @@ async function post(tenant: IntegrationTenant, body: Record<string, unknown>): P
   return response.json().catch(() => {
     throw new MspCadenceError("MSP Cadence returned something unreadable.");
   });
+}
+
+/**
+ * Check a pasted key against its MSP Cadence deployment and learn which tenant
+ * it belongs to. Used once, when an admin saves the connection.
+ */
+export async function verifyApiKey(key: string): Promise<{ url: string; tenantId: string }> {
+  const parsed = parseApiKey(key);
+  if (!parsed) throw new MspCadenceError("That does not look like an MSP Cadence API key (mspc_…).");
+  let response: Response;
+  try {
+    response = await fetch(parsed.url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${parsed.key}` },
+      body: JSON.stringify({ ping: true }),
+      cache: "no-store",
+    });
+  } catch {
+    throw new MspCadenceError("MSP Cadence could not be reached to check the key. Try again in a moment.");
+  }
+  if (response.status === 401) {
+    throw new MspCadenceError("MSP Cadence does not recognise this key. It may have been revoked — generate a new one.");
+  }
+  if (!response.ok) throw new MspCadenceError("MSP Cadence did not accept the key check. Try again in a moment.");
+  const data = (await response.json().catch(() => null)) as { tenant_id?: unknown } | null;
+  if (typeof data?.tenant_id !== "string" || !data.tenant_id) {
+    throw new MspCadenceError("MSP Cadence answered without a tenant for this key.");
+  }
+  return { url: parsed.url, tenantId: data.tenant_id };
 }
 
 export async function searchCustomers(tenant: IntegrationTenant, q: string): Promise<Customer[]> {
