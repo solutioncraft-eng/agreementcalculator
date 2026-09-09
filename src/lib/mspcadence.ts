@@ -37,6 +37,21 @@ export function integrationConfigured(tenant: IntegrationTenant): boolean {
   return Boolean(tenant.mspCadenceUrl && tenant.mspCadenceKeyEnc && tenant.mspCadenceTenantId);
 }
 
+/**
+ * True when `url` is an https URL on the same host as the workspace's MSP
+ * Cadence directory function, i.e. an asset MSP Cadence itself serves.
+ */
+export function isCustomerAssetUrl(url: string | null | undefined, directoryUrl: string | null | undefined): boolean {
+  if (!url || !directoryUrl) return false;
+  try {
+    const asset = new URL(url);
+    const directory = new URL(directoryUrl);
+    return asset.protocol === "https:" && asset.host === directory.host;
+  } catch {
+    return false;
+  }
+}
+
 function credential(tenant: IntegrationTenant): { url: string; key: string; tenantId: string } {
   if (!integrationConfigured(tenant)) {
     throw new MspCadenceError("MSP Cadence is not connected for this workspace.");
@@ -61,13 +76,19 @@ interface DirectoryClient {
   executive_sponsor_email: string | null;
 }
 
+/** A bare domain ("acme.com") becomes an https URL; anything blank becomes null. */
+function websiteOf(row: DirectoryClient): string | null {
+  const raw = (row.website ?? row.primary_domain ?? "").trim();
+  if (!raw) return null;
+  return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+}
+
 function toCustomer(row: DirectoryClient): Customer {
   return {
     id: row.id,
     name: row.name,
     logoUrl: row.logo_url ?? null,
-    // A bare domain is still worth printing when nobody filled in the URL.
-    website: row.website ?? row.primary_domain ?? null,
+    website: websiteOf(row),
     contactPhone: row.primary_contact_phone ?? null,
     technicalContactName: row.technical_poc_name ?? null,
     technicalContactEmail: row.technical_poc_email ?? null,

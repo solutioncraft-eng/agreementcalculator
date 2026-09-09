@@ -4,6 +4,7 @@ import path from "node:path";
 import { renderToBuffer } from "@react-pdf/renderer";
 import type { DocumentProps } from "@react-pdf/renderer";
 import type { ReactElement } from "react";
+import { isCustomerAssetUrl } from "@/lib/mspcadence";
 
 let logoCache: Buffer | null | undefined;
 
@@ -33,17 +34,30 @@ export async function workspaceLogo(logoUrl: string | null): Promise<Buffer | un
   }
 }
 
+const CUSTOMER_LOGO_MAX_BYTES = 2 * 1024 * 1024;
+const CUSTOMER_LOGO_TYPES = new Set(["image/png", "image/jpeg", "image/jpg"]);
+
 /**
  * The customer's own logo, for a customer-facing quote. Unlike a workspace
  * logo there is no fallback mark: a customer with no logo simply reads as their
- * name, exactly as an ordinary export does.
+ * name, exactly as an ordinary export does. The URL arrives in the export
+ * payload from the browser, so only images hosted by the workspace's own MSP
+ * Cadence instance are fetched, and only PNG/JPEG of a sane size.
  */
-export async function customerLogo(logoUrl: string | null | undefined): Promise<Buffer | undefined> {
-  if (!logoUrl) return undefined;
+export async function customerLogo(
+  logoUrl: string | null | undefined,
+  directoryUrl: string | null | undefined,
+): Promise<Buffer | undefined> {
+  if (!isCustomerAssetUrl(logoUrl, directoryUrl)) return undefined;
   try {
-    const response = await fetch(logoUrl, { cache: "force-cache" });
+    const response = await fetch(logoUrl!, { cache: "no-store", redirect: "error" });
     if (!response.ok) return undefined;
-    return Buffer.from(await response.arrayBuffer());
+    const type = (response.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
+    if (!CUSTOMER_LOGO_TYPES.has(type)) return undefined;
+    const length = Number(response.headers.get("content-length") ?? 0);
+    if (length > CUSTOMER_LOGO_MAX_BYTES) return undefined;
+    const bytes = Buffer.from(await response.arrayBuffer());
+    return bytes.length > CUSTOMER_LOGO_MAX_BYTES ? undefined : bytes;
   } catch {
     return undefined;
   }

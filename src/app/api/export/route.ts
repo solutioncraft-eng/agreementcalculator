@@ -194,7 +194,7 @@ export async function POST(request: Request) {
     workspace,
     logo,
     customer,
-    customerLogo: await customerLogo(payload.customerLogoUrl),
+    customerLogo: await customerLogo(payload.customerLogoUrl, tenant.mspCadenceUrl),
   };
 
   let bytes: Buffer;
