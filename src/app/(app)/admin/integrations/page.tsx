@@ -22,10 +22,8 @@ export default async function IntegrationsPage() {
 
       <IntegrationsForm
         config={{
-          url: tenant.mspCadenceUrl,
-          tenantId: tenant.mspCadenceTenantId,
-          // Only whether a key exists — the encrypted value never leaves the server.
-          keySet: Boolean(tenant.mspCadenceKeyEnc),
+          // Only the host — the encrypted key never leaves the server.
+          host: tenant.mspCadenceUrl ? new URL(tenant.mspCadenceUrl).host : null,
           connected: integrationConfigured(tenant),
         }}
         encryptionConfigured={encryptionConfigured()}
