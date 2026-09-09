@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { audit } from "@/lib/audit";
 import { requireTenant } from "@/lib/auth";
 import { appUrl, sendMail } from "@/lib/email";
+import { fetchCustomers, mspCadenceConfigured, MspCadenceError, type MspCadenceCustomer } from "@/lib/mspcadence";
 import { getActiveConfig } from "@/lib/pricing/config";
 import { forTier } from "@/lib/pricing/engine";
 import { calculate } from "@/lib/pricing/models";
@@ -133,4 +134,27 @@ export async function submitForReview(_prev: SubmitState, formData: FormData): P
   }
 
   redirect(`/quotes/${quote.id}`);
+}
+
+export interface CustomerLookupState {
+  customers?: MspCadenceCustomer[];
+  error?: string;
+}
+
+/**
+ * Searches the workspace's linked MSP Cadence tenant for customers. The tenant
+ * link on the session is the only scope the directory is ever asked for, so a
+ * workspace cannot read another's customers.
+ */
+export async function lookupCustomers(query: string): Promise<CustomerLookupState> {
+  const { tenant } = await requireTenant();
+  if (!tenant.mspCadenceTenantId || !mspCadenceConfigured()) {
+    return { error: "Customer lookup is not switched on for this workspace." };
+  }
+  const trimmed = query.trim().slice(0, 80);
+  try {
+    return { customers: await fetchCustomers(tenant.mspCadenceTenantId, trimmed) };
+  } catch (error) {
+    return { error: error instanceof MspCadenceError ? error.message : "The customer lookup failed." };
+  }
 }

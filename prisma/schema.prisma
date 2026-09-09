@@ -111,6 +111,11 @@ model Tenant {
   /// Months a submitted quote is retained before purge.
   retentionMonths Int @default(12)
 
+  // ── Integrations ─────────────────────────────────────────────────
+  /// The MSP Cadence tenant whose customer directory this workspace may read
+  /// when populating a quote header. Null keeps the lookup dormant.
+  mspCadenceTenantId String?
+
   // ── Billing ──────────────────────────────────────────────────────
   /// Stripe customer and subscription for this workspace. Written only by the
   /// checkout redirect and the Stripe webhook; Stripe stays the authority on

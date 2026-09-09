@@ -27,11 +27,26 @@ export interface DocWorkspace {
   accentColor?: string | null;
 }
 
+/**
+ * Customer details shown under the client name. Presentation only: nothing
+ * here feeds pricing, approval or the export record.
+ */
+export interface DocCustomer {
+  logo?: Buffer;
+  website?: string | null;
+  phone?: string | null;
+  technicalContactName?: string | null;
+  technicalContactEmail?: string | null;
+  executiveSponsorName?: string | null;
+  executiveSponsorEmail?: string | null;
+}
+
 export interface DocProps {
   result: CalcResult;
   /** ServiceTier.key of the offering the document is written for. */
   tierKey: string;
   clientName: string;
+  customer?: DocCustomer;
   notes?: string | null;
   stamp: StampInfo;
   workspace: DocWorkspace;
@@ -49,9 +64,38 @@ function utc(d: Date): string {
   return `${d.toISOString().slice(0, 16).replace("T", " ")} UTC`;
 }
 
+function contactLine(name?: string | null, email?: string | null): string | null {
+  const parts = [name, email].map((v) => v?.trim()).filter(Boolean);
+  return parts.length ? parts.join(" · ") : null;
+}
+
+function displayUrl(url: string): string {
+  return url.replace(/^https?:\/\//i, "").replace(/\/$/, "");
+}
+
+function CustomerBlock({ customer }: { customer: DocCustomer }) {
+  const lines = [
+    customer.website ? displayUrl(customer.website) : null,
+    customer.phone?.trim() || null,
+    contactLine(customer.technicalContactName, customer.technicalContactEmail),
+    contactLine(customer.executiveSponsorName, customer.executiveSponsorEmail),
+  ].filter((line): line is string => Boolean(line));
+  if (!lines.length) return null;
+  return (
+    <View style={styles.customerBlock}>
+      {lines.map((line) => (
+        <Text key={line} style={styles.metaLine}>
+          {line}
+        </Text>
+      ))}
+    </View>
+  );
+}
+
 function Header({
   stamp,
   clientName,
+  customer,
   title,
   workspaceName,
   logo,
@@ -59,6 +103,7 @@ function Header({
 }: {
   stamp: StampInfo;
   clientName: string;
+  customer?: DocCustomer;
   title: string;
   workspaceName: string;
   logo?: Buffer;
@@ -72,7 +117,12 @@ function Header({
         <Text style={[styles.eyebrow, accentColor ? { color: accentColor } : {}]}>
           {title.toUpperCase()}
         </Text>
-        <Text style={styles.title}>{clientName}</Text>
+        <View style={styles.clientRow}>
+          {/* eslint-disable-next-line jsx-a11y/alt-text -- react-pdf Image has no alt prop */}
+          {customer?.logo ? <Image style={styles.customerLogo} src={customer.logo} /> : null}
+          <Text style={styles.title}>{clientName}</Text>
+        </View>
+        {customer ? <CustomerBlock customer={customer} /> : null}
       </View>
       <View style={styles.headerRight}>
         <Text style={styles.metaLine}>Prepared {utc(stamp.exportedAt)}</Text>
@@ -166,7 +216,7 @@ export function buildDocument(docType: DocType, props: DocProps): ReactElement<D
   return element as unknown as ReactElement<DocumentProps>;
 }
 
-export function QuoteDocument({ result, tierKey, clientName, notes, stamp, workspace, logo }: DocProps) {
+export function QuoteDocument({ result, tierKey, clientName, customer, notes, stamp, workspace, logo }: DocProps) {
   const t = tierResultFor(result, tierKey);
   const tierName = t.label;
   const lower = result.tiers[t.index - 1];
@@ -186,6 +236,7 @@ export function QuoteDocument({ result, tierKey, clientName, notes, stamp, works
         <Header
           stamp={stamp}
           clientName={clientName}
+          customer={customer}
           title="Managed services agreement"
           workspaceName={workspace.name}
           logo={logo}
@@ -298,7 +349,7 @@ export function QuoteDocument({ result, tierKey, clientName, notes, stamp, works
   );
 }
 
-export function CogsDocument({ result, tierKey, clientName, notes, stamp, workspace, logo }: DocProps) {
+export function CogsDocument({ result, tierKey, clientName, customer, notes, stamp, workspace, logo }: DocProps) {
   const t = tierResultFor(result, tierKey);
   const tierName = t.label;
   // The offering carries its whole parent chain's items on top of its own.
@@ -321,6 +372,7 @@ export function CogsDocument({ result, tierKey, clientName, notes, stamp, worksp
         <Header
           stamp={stamp}
           clientName={clientName}
+          customer={customer}
           title="Internal COGS worksheet"
           workspaceName={workspace.name}
           logo={logo}

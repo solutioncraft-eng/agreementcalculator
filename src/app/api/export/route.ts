@@ -9,10 +9,12 @@ import {
   buildDocument,
   type ApprovalRecord,
   type ApprovalState,
+  type DocCustomer,
   type DocWorkspace,
   type StampInfo,
 } from "@/lib/pdf/documents";
-import { newExportId, renderPdf, workspaceLogo } from "@/lib/pdf/render";
+import { customerLogo, newExportId, renderPdf, workspaceLogo } from "@/lib/pdf/render";
+import { isMspCadenceAssetUrl } from "@/lib/mspcadence";
 import { exportPayloadSchema } from "@/lib/schemas";
 import { APP_VERSION_STAMP } from "@/lib/version";
 import { workspaceAccess } from "@/lib/billing";
@@ -22,6 +24,35 @@ export const dynamic = "force-dynamic";
 
 function slug(value: string): string {
   return value.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "") || "quote";
+}
+
+/**
+ * Presentation-only customer details from the payload. They decorate the
+ * header and nothing else: pricing, approval gating and the export record
+ * never read them. The logo is only fetched from MSP Cadence's own host.
+ */
+async function customerProps(payload: {
+  customerLogoUrl?: string | null;
+  customerWebsite?: string | null;
+  customerPhone?: string | null;
+  customerTechnicalContactName?: string | null;
+  customerTechnicalContactEmail?: string | null;
+  customerExecutiveSponsorName?: string | null;
+  customerExecutiveSponsorEmail?: string | null;
+}): Promise<DocCustomer | undefined> {
+  const customer: DocCustomer = {
+    logo: isMspCadenceAssetUrl(payload.customerLogoUrl)
+      ? await customerLogo(payload.customerLogoUrl)
+      : undefined,
+    website: payload.customerWebsite || null,
+    phone: payload.customerPhone || null,
+    technicalContactName: payload.customerTechnicalContactName || null,
+    technicalContactEmail: payload.customerTechnicalContactEmail || null,
+    executiveSponsorName: payload.customerExecutiveSponsorName || null,
+    executiveSponsorEmail: payload.customerExecutiveSponsorEmail || null,
+  };
+  const populated = Object.values(customer).some((value) => value !== null && value !== undefined);
+  return populated ? customer : undefined;
 }
 
 export async function POST(request: Request) {
@@ -172,7 +203,8 @@ export async function POST(request: Request) {
     accentColor: tenant.accentColor,
   };
   const logo = await workspaceLogo(tenant.logoUrl);
-  const props = { result, tierKey: payload.tierKey, clientName, notes, stamp, workspace, logo };
+  const customer = await customerProps(payload);
+  const props = { result, tierKey: payload.tierKey, clientName, customer, notes, stamp, workspace, logo };
 
   let bytes: Buffer;
   let checksum: string;

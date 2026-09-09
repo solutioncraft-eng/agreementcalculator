@@ -21,10 +21,35 @@ export const calcInputsSchema = z.object({
   bundleKey: z.string().min(1).max(64),
 });
 
+const optionalText = (max: number) => z.string().trim().max(max).nullish().or(z.literal(""));
+const optionalUrl = z
+  .string()
+  .trim()
+  .url()
+  .max(2048)
+  .refine((value) => /^https?:\/\//i.test(value), "Must be an http(s) URL")
+  .nullish()
+  .or(z.literal(""));
+
+/**
+ * Presentation-only customer details pulled from MSP Cadence. None of these
+ * touch pricing or approval; they only decorate the document header.
+ */
+export const exportCustomerFields = {
+  customerLogoUrl: optionalUrl,
+  customerWebsite: optionalUrl,
+  customerPhone: optionalText(40),
+  customerTechnicalContactName: optionalText(120),
+  customerTechnicalContactEmail: optionalText(200),
+  customerExecutiveSponsorName: optionalText(120),
+  customerExecutiveSponsorEmail: optionalText(200),
+};
+
 export const exportPayloadSchema = z.object({
   docType: z.enum(["QUOTE", "COGS"]),
   tierKey: tierKeySchema,
   clientName: z.string().trim().min(1).max(120),
+  ...exportCustomerFields,
   notes: z.string().trim().max(2000).optional().or(z.literal("")),
   quoteId: z.string().trim().min(1).max(64).optional().or(z.literal("")),
   inputs: calcInputsSchema.optional(),

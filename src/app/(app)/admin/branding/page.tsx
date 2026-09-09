@@ -1,4 +1,5 @@
 import { requireRole } from "@/lib/auth";
+import { mspCadenceConfigured } from "@/lib/mspcadence";
 import { uploadsConfigured } from "@/lib/storage";
 import { BrandingForm } from "./branding-form";
 
@@ -27,8 +28,10 @@ export default async function BrandingPage() {
           logoUrl: tenant.logoUrl,
           accentColor: tenant.accentColor,
           pdfFooter: tenant.pdfFooter,
+          mspCadenceTenantId: tenant.mspCadenceTenantId,
         }}
         uploadsConfigured={uploadsConfigured}
+        mspCadenceConfigured={mspCadenceConfigured()}
       />
     </div>
   );

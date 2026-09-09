@@ -23,6 +23,13 @@ const schema = z.object({
     .string()
     .trim()
     .refine((value) => value === "" || /^https:\/\/\S+$/.test(value), "A logo URL must be https."),
+  mspCadenceTenantId: z
+    .string()
+    .trim()
+    .refine(
+      (value) => value === "" || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value),
+      "The MSP Cadence tenant id is a UUID.",
+    ),
 });
 
 export async function saveBranding(_prev: BrandingState, formData: FormData): Promise<BrandingState> {
@@ -32,6 +39,7 @@ export async function saveBranding(_prev: BrandingState, formData: FormData): Pr
     accentColor: formData.get("accentColor") ?? "",
     pdfFooter: formData.get("pdfFooter") ?? "",
     logoUrl: formData.get("logoUrl") ?? "",
+    mspCadenceTenantId: formData.get("mspCadenceTenantId") ?? "",
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the branding details." };
 
@@ -49,11 +57,13 @@ export async function saveBranding(_prev: BrandingState, formData: FormData): Pr
     logoUrl: tenant.logoUrl,
     accentColor: tenant.accentColor,
     pdfFooter: tenant.pdfFooter,
+    mspCadenceTenantId: tenant.mspCadenceTenantId,
   };
   const after = {
     logoUrl,
     accentColor: parsed.data.accentColor || null,
     pdfFooter: parsed.data.pdfFooter || null,
+    mspCadenceTenantId: parsed.data.mspCadenceTenantId.toLowerCase() || null,
   };
 
   await db.tenant.update({ where: { id: tenant.id }, data: after });

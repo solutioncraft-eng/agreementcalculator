@@ -5,6 +5,14 @@ export interface ExportRequest {
   /** ServiceTier.key of the offering being exported. */
   tierKey: string;
   clientName: string;
+  /** Presentation-only customer details (from MSP Cadence); never affect pricing. */
+  customerLogoUrl?: string | null;
+  customerWebsite?: string | null;
+  customerPhone?: string | null;
+  customerTechnicalContactName?: string | null;
+  customerTechnicalContactEmail?: string | null;
+  customerExecutiveSponsorName?: string | null;
+  customerExecutiveSponsorEmail?: string | null;
   notes?: string;
   inputs?: CalcInputs;
   quoteId?: string;

@@ -20,6 +20,8 @@ import {
 import { calculate } from "@/lib/pricing/models";
 import { submitForReview, type SubmitState } from "./actions";
 import { downloadExport } from "@/lib/export-client";
+import type { MspCadenceCustomer } from "@/lib/mspcadence";
+import { CustomerLookup } from "./customer-lookup";
 
 /**
  * The add-on multiplier is typed rather than dragged, so it is clamped to the
@@ -42,13 +44,18 @@ const UNIT_LABEL: Record<string, string> = {
 export function CalculatorClient({
   config,
   defaults,
+  customerLookupEnabled,
 }: {
   config: PricingConfig;
   defaults: CalcInputs;
+  /** The workspace is linked to an MSP Cadence tenant and the directory key is set. */
+  customerLookupEnabled: boolean;
 }) {
   const [inputs, setInputs] = useState<CalcInputs>(defaults);
   const [tierKey, setTierKey] = useState<string>(config.tiers[0]?.key ?? "");
   const [clientName, setClientName] = useState("");
+  // Presentation-only details for the PDF header; cleared when the name is retyped.
+  const [customer, setCustomer] = useState<MspCadenceCustomer | null>(null);
   const [notes, setNotes] = useState("");
   const [showCosts, setShowCosts] = useState(true);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -71,7 +78,20 @@ export function CalculatorClient({
       return;
     }
     setBusy(docType);
-    const error = await downloadExport({ docType, tierKey: selected.key, clientName, notes, inputs });
+    const error = await downloadExport({
+      docType,
+      tierKey: selected.key,
+      clientName,
+      notes,
+      inputs,
+      customerLogoUrl: customer?.logoUrl,
+      customerWebsite: customer?.website,
+      customerPhone: customer?.primaryContactPhone,
+      customerTechnicalContactName: customer?.technicalPocName,
+      customerTechnicalContactEmail: customer?.technicalPocEmail,
+      customerExecutiveSponsorName: customer?.executiveSponsorName,
+      customerExecutiveSponsorEmail: customer?.executiveSponsorEmail,
+    });
     setBusy(null);
     if (error) setExportError(error);
   }
@@ -443,10 +463,23 @@ export function CalculatorClient({
                 <input
                   id="clientName"
                   value={clientName}
-                  onChange={(e) => setClientName(e.target.value)}
+                  onChange={(e) => {
+                    setClientName(e.target.value);
+                    setCustomer(null);
+                  }}
                   placeholder="Acme Manufacturing"
                   className="field mt-1"
                 />
+                {customerLookupEnabled ? (
+                  <CustomerLookup
+                    selected={customer}
+                    onSelect={(picked) => {
+                      setCustomer(picked);
+                      setClientName(picked.name);
+                    }}
+                    onClear={() => setCustomer(null)}
+                  />
+                ) : null}
               </div>
               <div>
                 <label className="label" htmlFor="notes">
