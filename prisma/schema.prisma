@@ -133,6 +133,20 @@ model Tenant {
   compReason    String?
   compExpiresAt DateTime?
 
+  // ── MSP Cadence integration ──────────────────────────────────────
+  /// One workspace links to exactly one MSP Cadence tenant, so its customer
+  /// directory can fill a customer-facing quote header. Set by an ADMIN under
+  /// Settings → Integrations; all three are needed before the picker works.
+  /// URL of that instance's `quote-customer-directory` function.
+  mspCadenceUrl String?
+
+  /// The bearer secret, AES-256-GCM encrypted (see `src/lib/crypto.ts`). Never
+  /// stored, returned or logged in plaintext — hence the `Enc` suffix.
+  mspCadenceKeyEnc String?
+
+  /// Which tenant to ask about, since the caller carries no MSP Cadence user.
+  mspCadenceTenantId String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

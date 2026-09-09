@@ -29,6 +29,19 @@ export const exportPayloadSchema = z.object({
   quoteId: z.string().trim().min(1).max(64).optional().or(z.literal("")),
   inputs: calcInputsSchema.optional(),
   timeZone: z.string().trim().max(64).optional(),
+  // Customer-facing quote header, pulled from MSP Cadence. All optional, so an
+  // export that does not use the integration is unchanged.
+  customerLogoUrl: z
+    .string()
+    .trim()
+    .refine((value) => value === "" || /^https:\/\/\S+$/.test(value), "A customer logo URL must be https.")
+    .optional(),
+  customerWebsite: z.string().trim().max(200).optional(),
+  customerContactPhone: z.string().trim().max(60).optional(),
+  customerTechnicalContactName: z.string().trim().max(120).optional(),
+  customerTechnicalContactEmail: z.string().trim().max(160).optional(),
+  customerExecutiveContactName: z.string().trim().max(120).optional(),
+  customerExecutiveContactEmail: z.string().trim().max(160).optional(),
 });
 
 export const submitQuoteSchema = z.object({

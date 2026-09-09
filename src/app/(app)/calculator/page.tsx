@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requireTenant } from "@/lib/auth";
+import { integrationConfigured } from "@/lib/mspcadence";
 import { getActiveConfig } from "@/lib/pricing/config";
 import { DEFAULT_INPUTS } from "@/lib/pricing/defaults";
 import { startingInputs } from "@/lib/pricing/models";
@@ -8,7 +9,7 @@ import { CalculatorClient } from "./calculator-client";
 export const dynamic = "force-dynamic";
 
 export default async function CalculatorPage() {
-  const { role, db } = await requireTenant();
+  const { role, db, tenant } = await requireTenant();
   const config = await getActiveConfig(db);
 
   if (!config) {
@@ -30,6 +31,11 @@ export default async function CalculatorPage() {
   }
 
   return (
-    <CalculatorClient config={config} defaults={{ ...DEFAULT_INPUTS, ...startingInputs(config) }} />
+    <CalculatorClient
+      config={config}
+      defaults={{ ...DEFAULT_INPUTS, ...startingInputs(config) }}
+      customerDirectory={integrationConfigured(tenant)}
+      canAdminister={role === "ADMIN"}
+    />
   );
 }

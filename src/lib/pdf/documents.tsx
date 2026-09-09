@@ -27,6 +27,20 @@ export interface DocWorkspace {
   accentColor?: string | null;
 }
 
+/**
+ * The customer a customer-facing quote is addressed to, from MSP Cadence.
+ * Presentation only, and every field optional: with none of it the header reads
+ * exactly as it always has.
+ */
+export interface DocCustomer {
+  website?: string | null;
+  contactPhone?: string | null;
+  technicalContactName?: string | null;
+  technicalContactEmail?: string | null;
+  executiveContactName?: string | null;
+  executiveContactEmail?: string | null;
+}
+
 export interface DocProps {
   result: CalcResult;
   /** ServiceTier.key of the offering the document is written for. */
@@ -36,6 +50,9 @@ export interface DocProps {
   stamp: StampInfo;
   workspace: DocWorkspace;
   logo?: Buffer;
+  customer?: DocCustomer;
+  /** The customer's own logo, shown beside the workspace's. */
+  customerLogo?: Buffer;
 }
 
 const UNIT_LABEL: Record<string, string> = {
@@ -49,6 +66,11 @@ function utc(d: Date): string {
   return `${d.toISOString().slice(0, 16).replace("T", " ")} UTC`;
 }
 
+/** "Dana Reyes · dana@acme.com", or whichever half exists. */
+function contactLine(name?: string | null, email?: string | null): string | null {
+  return [name, email].filter(Boolean).join(" · ") || null;
+}
+
 function Header({
   stamp,
   clientName,
@@ -56,6 +78,8 @@ function Header({
   workspaceName,
   logo,
   accentColor,
+  customer,
+  customerLogo,
 }: {
   stamp: StampInfo;
   clientName: string;
@@ -63,7 +87,15 @@ function Header({
   workspaceName: string;
   logo?: Buffer;
   accentColor?: string | null;
+  customer?: DocCustomer;
+  customerLogo?: Buffer;
 }) {
+  const contacts = [
+    customer?.contactPhone,
+    contactLine(customer?.technicalContactName, customer?.technicalContactEmail),
+    contactLine(customer?.executiveContactName, customer?.executiveContactEmail),
+  ].filter((line): line is string => Boolean(line));
+
   return (
     <View style={styles.headerRow}>
       <View>
@@ -72,7 +104,21 @@ function Header({
         <Text style={[styles.eyebrow, accentColor ? { color: accentColor } : {}]}>
           {title.toUpperCase()}
         </Text>
-        <Text style={styles.title}>{clientName}</Text>
+        {customerLogo ? (
+          <View style={styles.customerBlock}>
+            {/* eslint-disable-next-line jsx-a11y/alt-text -- react-pdf Image has no alt prop */}
+            <Image style={styles.customerLogo} src={customerLogo} />
+            <Text style={styles.title}>{clientName}</Text>
+          </View>
+        ) : (
+          <Text style={styles.title}>{clientName}</Text>
+        )}
+        {customer?.website ? <Text style={styles.metaLine}>{customer.website}</Text> : null}
+        {contacts.map((line) => (
+          <Text key={line} style={styles.metaLine}>
+            {line}
+          </Text>
+        ))}
       </View>
       <View style={styles.headerRight}>
         <Text style={styles.metaLine}>Prepared {utc(stamp.exportedAt)}</Text>
@@ -166,7 +212,17 @@ export function buildDocument(docType: DocType, props: DocProps): ReactElement<D
   return element as unknown as ReactElement<DocumentProps>;
 }
 
-export function QuoteDocument({ result, tierKey, clientName, notes, stamp, workspace, logo }: DocProps) {
+export function QuoteDocument({
+  result,
+  tierKey,
+  clientName,
+  notes,
+  stamp,
+  workspace,
+  logo,
+  customer,
+  customerLogo,
+}: DocProps) {
   const t = tierResultFor(result, tierKey);
   const tierName = t.label;
   const lower = result.tiers[t.index - 1];
@@ -190,6 +246,8 @@ export function QuoteDocument({ result, tierKey, clientName, notes, stamp, works
           workspaceName={workspace.name}
           logo={logo}
           accentColor={accent}
+          customer={customer}
+          customerLogo={customerLogo}
         />
         <Text style={styles.confidential}>PROPOSED MONTHLY INVESTMENT · {tierName.toUpperCase()}</Text>
 

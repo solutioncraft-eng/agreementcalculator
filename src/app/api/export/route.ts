@@ -9,10 +9,11 @@ import {
   buildDocument,
   type ApprovalRecord,
   type ApprovalState,
+  type DocCustomer,
   type DocWorkspace,
   type StampInfo,
 } from "@/lib/pdf/documents";
-import { newExportId, renderPdf, workspaceLogo } from "@/lib/pdf/render";
+import { customerLogo, newExportId, renderPdf, workspaceLogo } from "@/lib/pdf/render";
 import { exportPayloadSchema } from "@/lib/schemas";
 import { APP_VERSION_STAMP } from "@/lib/version";
 import { workspaceAccess } from "@/lib/billing";
@@ -172,7 +173,29 @@ export async function POST(request: Request) {
     accentColor: tenant.accentColor,
   };
   const logo = await workspaceLogo(tenant.logoUrl);
-  const props = { result, tierKey: payload.tierKey, clientName, notes, stamp, workspace, logo };
+
+  // A customer-facing quote is the same document with a richer header; nothing
+  // below this point (approval state, stamp, checksum, export record) knows or
+  // cares that the customer came from MSP Cadence.
+  const customer: DocCustomer = {
+    website: payload.customerWebsite || null,
+    contactPhone: payload.customerContactPhone || null,
+    technicalContactName: payload.customerTechnicalContactName || null,
+    technicalContactEmail: payload.customerTechnicalContactEmail || null,
+    executiveContactName: payload.customerExecutiveContactName || null,
+    executiveContactEmail: payload.customerExecutiveContactEmail || null,
+  };
+  const props = {
+    result,
+    tierKey: payload.tierKey,
+    clientName,
+    notes,
+    stamp,
+    workspace,
+    logo,
+    customer,
+    customerLogo: await customerLogo(payload.customerLogoUrl),
+  };
 
   let bytes: Buffer;
   let checksum: string;
