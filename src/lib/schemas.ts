@@ -21,6 +21,23 @@ export const calcInputsSchema = z.object({
   bundleKey: z.string().min(1).max(64),
 });
 
+/** An optional, well-formed URL on one of `protocols`; blank is allowed and means "none". */
+function optionalHttpUrl(protocols: string[], message: string) {
+  return z
+    .string()
+    .trim()
+    .max(500)
+    .refine((value) => {
+      if (value === "") return true;
+      try {
+        return protocols.includes(new URL(value).protocol);
+      } catch {
+        return false;
+      }
+    }, message)
+    .optional();
+}
+
 export const exportPayloadSchema = z.object({
   docType: z.enum(["QUOTE", "COGS"]),
   tierKey: tierKeySchema,
@@ -31,12 +48,8 @@ export const exportPayloadSchema = z.object({
   timeZone: z.string().trim().max(64).optional(),
   // Customer-facing quote header, pulled from MSP Cadence. All optional, so an
   // export that does not use the integration is unchanged.
-  customerLogoUrl: z
-    .string()
-    .trim()
-    .refine((value) => value === "" || /^https:\/\/\S+$/.test(value), "A customer logo URL must be https.")
-    .optional(),
-  customerWebsite: z.string().trim().max(200).optional(),
+  customerLogoUrl: optionalHttpUrl(["https:"], "A customer logo URL must be https."),
+  customerWebsite: optionalHttpUrl(["http:", "https:"], "A customer website must be a web address."),
   customerContactPhone: z.string().trim().max(60).optional(),
   customerTechnicalContactName: z.string().trim().max(120).optional(),
   customerTechnicalContactEmail: z.string().trim().max(160).optional(),

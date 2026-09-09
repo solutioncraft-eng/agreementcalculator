@@ -16,7 +16,10 @@ const schema = z.object({
     .string()
     .trim()
     .refine((value) => value === "" || /^https:\/\/\S+$/.test(value), "The function URL must be https."),
-  tenantId: z.string().trim().max(64),
+  tenantId: z
+    .string()
+    .trim()
+    .refine((value) => value === "" || z.string().uuid().safeParse(value).success, "The tenant id must be a UUID."),
   // Optional so an administrator can correct the URL or tenant id without
   // re-typing a secret they cannot read back.
   key: z.string().trim().max(400).optional(),
