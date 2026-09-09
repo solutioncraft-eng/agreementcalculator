@@ -86,6 +86,7 @@ export async function createDraft(): Promise<void> {
               key: item.key,
               label: item.label,
               vendor: item.vendor,
+              category: item.category,
               unit: item.unit,
               unitCost: item.unitCost,
               active: item.active,
@@ -209,6 +210,7 @@ export async function saveCogsItem(_prev: AdminState, formData: FormData): Promi
   const parsed = cogsItemSchema.safeParse({
     label: formData.get("label"),
     vendor: formData.get("vendor") ?? undefined,
+    category: formData.get("category") ?? undefined,
     unit: formData.get("unit"),
     tierKeys: formData.getAll("tierKeys").map(String).filter(Boolean),
     unitCost: formData.get("unitCost"),
@@ -238,6 +240,7 @@ export async function saveCogsItem(_prev: AdminState, formData: FormData): Promi
         data: {
           label: data.label,
           vendor: data.vendor || null,
+          category: data.category || null,
           unit: data.unit,
           unitCost: data.unitCost,
           active: data.active ?? true,
@@ -284,6 +287,7 @@ export async function saveCogsItem(_prev: AdminState, formData: FormData): Promi
         key,
         label: data.label,
         vendor: data.vendor || null,
+        category: data.category || null,
         unit: data.unit,
         unitCost: data.unitCost,
         active: data.active ?? true,

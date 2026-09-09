@@ -60,6 +60,7 @@ export default async function PricingVersionPage({ params }: { params: Promise<{
           id: item.id,
           label: item.label,
           vendor: item.vendor,
+          category: item.category,
           unit: item.unit,
           tierKeys: item.tiers.map((membership) => membership.tierKey),
           unitCost: item.unitCost.toNumber(),

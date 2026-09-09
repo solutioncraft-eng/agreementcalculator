@@ -73,6 +73,7 @@ export const reviewDecisionSchema = z.object({
 export const cogsItemSchema = z.object({
   label: z.string().trim().min(2).max(80),
   vendor: z.string().trim().max(80).optional().or(z.literal("")),
+  category: z.string().trim().max(60).optional().or(z.literal("")),
   unit: unitSchema,
   /**
    * The offerings this item is part of. An item may serve several, or none

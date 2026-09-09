@@ -330,6 +330,10 @@ model CogsItem {
   key       String
   label     String
   vendor    String?
+  /// Heading the item is listed under on customer-facing documents, e.g.
+  /// "Security & Threat Protection". Presentation only; null falls back to a
+  /// keyword guess from the label.
+  category  String?
   unit      Unit
   unitCost  Decimal @db.Decimal(10, 4)
   /// Sell price per unit, used by rate-card style models. Null for cost-plus.

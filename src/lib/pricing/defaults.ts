@@ -59,18 +59,18 @@ export const SEED_SERVICE_TIERS = [
  * it needs and adds the two items only it carries.
  */
 export const SEED_COGS_ITEMS = [
-  { key: "rmm", label: "Remote monitoring and management", unit: "DEVICE", tierKeys: ["parent", "co-managed"], unitCost: 3.49 },
-  { key: "edr", label: "Endpoint detection and response", unit: "DEVICE", tierKeys: ["parent", "co-managed"], unitCost: 2.85 },
-  { key: "pam", label: "Privileged access management", unit: "DEVICE", tierKeys: ["parent"], unitCost: 1.71 },
-  { key: "email", label: "Email security and spam filtering", unit: "USER", tierKeys: ["parent", "co-managed"], unitCost: 1.5 },
-  { key: "vuln", label: "Vulnerability monitoring", unit: "DEVICE", tierKeys: ["parent"], unitCost: 0.15 },
-  { key: "net", label: "Network monitoring", unit: "LOCATION", tierKeys: ["parent"], unitCost: 23 },
-  { key: "mfa", label: "Multi-factor authentication", unit: "USER", tierKeys: ["addon"], unitCost: 3 },
-  { key: "backup", label: "Cloud mailbox and file backup", unit: "USER", tierKeys: ["addon"], unitCost: 3 },
-  { key: "pw", label: "Password manager", unit: "USER", tierKeys: ["addon"], unitCost: 2.25 },
-  { key: "sat", label: "Security awareness training", unit: "USER", tierKeys: ["addon"], unitCost: 1.5 },
-  { key: "portal", label: "Shared service desk portal", unit: "USER", tierKeys: ["co-managed"], unitCost: 2 },
-  { key: "docs", label: "Documentation and asset platform", unit: "USER", tierKeys: ["co-managed"], unitCost: 1.25 },
+  { key: "rmm", label: "Remote monitoring and management", category: "Proactive Maintenance", unit: "DEVICE", tierKeys: ["parent", "co-managed"], unitCost: 3.49 },
+  { key: "edr", label: "Endpoint detection and response", category: "Security & Threat Protection", unit: "DEVICE", tierKeys: ["parent", "co-managed"], unitCost: 2.85 },
+  { key: "pam", label: "Privileged access management", category: "Security & Threat Protection", unit: "DEVICE", tierKeys: ["parent"], unitCost: 1.71 },
+  { key: "email", label: "Email security and spam filtering", category: "Security & Threat Protection", unit: "USER", tierKeys: ["parent", "co-managed"], unitCost: 1.5 },
+  { key: "vuln", label: "Vulnerability monitoring", category: "Proactive Maintenance", unit: "DEVICE", tierKeys: ["parent"], unitCost: 0.15 },
+  { key: "net", label: "Network monitoring", category: "Proactive Maintenance", unit: "LOCATION", tierKeys: ["parent"], unitCost: 23 },
+  { key: "mfa", label: "Multi-factor authentication", category: "Security & Threat Protection", unit: "USER", tierKeys: ["addon"], unitCost: 3 },
+  { key: "backup", label: "Cloud mailbox and file backup", category: "Data Protection & Recovery", unit: "USER", tierKeys: ["addon"], unitCost: 3 },
+  { key: "pw", label: "Password manager", category: "Security & Threat Protection", unit: "USER", tierKeys: ["addon"], unitCost: 2.25 },
+  { key: "sat", label: "Security awareness training", category: "Security & Threat Protection", unit: "USER", tierKeys: ["addon"], unitCost: 1.5 },
+  { key: "portal", label: "Shared service desk portal", category: "Service & Support", unit: "USER", tierKeys: ["co-managed"], unitCost: 2 },
+  { key: "docs", label: "Documentation and asset platform", category: "Service & Support", unit: "USER", tierKeys: ["co-managed"], unitCost: 1.25 },
 ] as const;
 
 export const SEED_BUNDLES = [
