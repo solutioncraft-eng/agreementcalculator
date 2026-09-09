@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { isCustomerAssetUrl } from "../src/lib/mspcadence";
 import { exportPayloadSchema } from "../src/lib/schemas";
+import { displayPhone, displayWebsite } from "../src/lib/pdf/format";
 
 const base = { docType: "QUOTE", tierKey: "core", clientName: "Acme" };
 const ok = (extra: Record<string, unknown>) => exportPayloadSchema.safeParse({ ...base, ...extra }).success;
@@ -26,4 +27,15 @@ test("only https assets on the workspace's MSP Cadence host count as customer lo
   assert.equal(isCustomerAssetUrl("https://proj.supabase.co.evil.example/a.png", directory), false);
   assert.equal(isCustomerAssetUrl("https://proj.supabase.co/a.png", null), false);
   assert.equal(isCustomerAssetUrl(null, directory), false);
+});
+
+test("customer website and phone are shown in their printed form", () => {
+  assert.equal(displayWebsite("https://agentschoice.com/"), "agentschoice.com");
+  assert.equal(displayWebsite("https://www.acme.example/portal"), "acme.example/portal");
+  assert.equal(displayWebsite("not a url"), "not a url");
+  assert.equal(displayWebsite(null), null);
+  assert.equal(displayPhone("2162616499"), "(216) 261-6499");
+  assert.equal(displayPhone("+1 216-261-6499"), "(216) 261-6499");
+  assert.equal(displayPhone("+44 20 7946 0958"), "+44 20 7946 0958");
+  assert.equal(displayPhone(""), null);
 });

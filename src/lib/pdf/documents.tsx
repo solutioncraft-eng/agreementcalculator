@@ -13,6 +13,7 @@ import {
   tierResultFor,
 } from "@/lib/pricing/engine";
 import { approvalLabel, type StampInfo } from "./stamp";
+import { displayPhone, displayWebsite } from "./format";
 import { brand, styles } from "./theme";
 
 export { approvalLabel, type ApprovalRecord, type ApprovalState, type StampInfo } from "./stamp";
@@ -71,6 +72,21 @@ function contactLine(name?: string | null, email?: string | null): string | null
   return [name, email].filter(Boolean).join(" · ") || null;
 }
 
+function contactRows(customer?: DocCustomer): { label: string; value: string }[] {
+  const rows = [
+    { label: "Phone", value: displayPhone(customer?.contactPhone) },
+    {
+      label: "Technical contact",
+      value: contactLine(customer?.technicalContactName, customer?.technicalContactEmail),
+    },
+    {
+      label: "Executive sponsor",
+      value: contactLine(customer?.executiveContactName, customer?.executiveContactEmail),
+    },
+  ];
+  return rows.filter((row): row is { label: string; value: string } => Boolean(row.value));
+}
+
 function Header({
   stamp,
   clientName,
@@ -90,41 +106,48 @@ function Header({
   customer?: DocCustomer;
   customerLogo?: Buffer;
 }) {
-  const contacts = [
-    customer?.contactPhone,
-    contactLine(customer?.technicalContactName, customer?.technicalContactEmail),
-    contactLine(customer?.executiveContactName, customer?.executiveContactEmail),
-  ].filter((line): line is string => Boolean(line));
+  const contacts = contactRows(customer);
+  const customerFacing = Boolean(customerLogo || customer?.website || contacts.length);
 
   return (
     <View style={styles.headerRow}>
-      <View>
+      <View style={styles.headerLeft}>
         {/* eslint-disable-next-line jsx-a11y/alt-text -- react-pdf Image has no alt prop */}
         {logo ? <Image style={styles.logo} src={logo} /> : <Text style={styles.title}>{workspaceName}</Text>}
-        <Text style={[styles.eyebrow, accentColor ? { color: accentColor } : {}]}>
-          {title.toUpperCase()}
-        </Text>
-        {customerLogo ? (
+        <Text style={[styles.eyebrow, accentColor ? { color: accentColor } : {}]}>{title.toUpperCase()}</Text>
+        {customerFacing ? (
           <View style={styles.customerBlock}>
-            {/* eslint-disable-next-line jsx-a11y/alt-text -- react-pdf Image has no alt prop */}
-            <Image style={styles.customerLogo} src={customerLogo} />
-            <Text style={styles.title}>{clientName}</Text>
+            {customerLogo ? (
+              // eslint-disable-next-line jsx-a11y/alt-text -- react-pdf Image has no alt prop
+              <Image style={styles.customerLogo} src={customerLogo} />
+            ) : null}
+            <View>
+              <Text style={styles.metaLine}>Prepared for</Text>
+              <Text style={styles.customerName}>{clientName}</Text>
+              {customer?.website ? (
+                <Text style={styles.customerWebsite}>{displayWebsite(customer.website)}</Text>
+              ) : null}
+            </View>
           </View>
         ) : (
           <Text style={styles.title}>{clientName}</Text>
         )}
-        {customer?.website ? <Text style={styles.metaLine}>{customer.website}</Text> : null}
-        {contacts.map((line) => (
-          <Text key={line} style={styles.metaLine}>
-            {line}
-          </Text>
-        ))}
       </View>
       <View style={styles.headerRight}>
         <Text style={styles.metaLine}>Prepared {utc(stamp.exportedAt)}</Text>
         <Text style={styles.metaLine}>By {stamp.exportedBy}</Text>
         <Text style={styles.metaLine}>Pricing version {stamp.pricingVersion}</Text>
         {stamp.quoteRef ? <Text style={styles.metaLine}>Quote {stamp.quoteRef}</Text> : null}
+        {contacts.length ? (
+          <View style={styles.contacts}>
+            {contacts.map((row) => (
+              <Text key={row.label} style={styles.contactValue}>
+                <Text style={styles.contactLabel}>{row.label} </Text>
+                {row.value}
+              </Text>
+            ))}
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -270,9 +293,9 @@ export function QuoteDocument({
           {lower ? (
             <>
               <Text>
-                Everything in {lower.label} — 24/7 monitoring and remediation, patching, endpoint
-                protection, email security, vulnerability management, network monitoring, and unlimited
-                remote support — plus what {tierName} adds:
+                Everything in {lower.label} — 24/7 monitoring and remediation, patching, endpoint protection,
+                email security, vulnerability management, network monitoring, and unlimited remote support —
+                plus what {tierName} adds:
               </Text>
               <View style={{ marginTop: 6 }}>
                 {t.lines.map((l) => (
@@ -285,9 +308,9 @@ export function QuoteDocument({
             </>
           ) : (
             <Text>
-              24/7 monitoring and remediation, patching and lifecycle management, managed endpoint
-              protection, email security, vulnerability management, network monitoring, privileged access
-              control, and unlimited remote support for the environment shown above.
+              24/7 monitoring and remediation, patching and lifecycle management, managed endpoint protection,
+              email security, vulnerability management, network monitoring, privileged access control, and
+              unlimited remote support for the environment shown above.
             </Text>
           )}
         </View>
@@ -342,9 +365,9 @@ export function QuoteDocument({
 
         <View style={styles.section}>
           <Text style={[styles.rowMuted, { fontSize: 8 }]}>
-            Rates assume the environment counts shown and are subject to a quarterly true-up. Mailbox count
-            is assumed equal to user count. This document is a proposal, not an invoice, and does not
-            constitute a contract until countersigned.
+            Rates assume the environment counts shown and are subject to a quarterly true-up. Mailbox count is
+            assumed equal to user count. This document is a proposal, not an invoice, and does not constitute
+            a contract until countersigned.
           </Text>
         </View>
 
@@ -479,7 +502,10 @@ export function CogsDocument({ result, tierKey, clientName, notes, stamp, worksp
 
         {result.triggers.length ? (
           <View
-            style={[styles.approvalBlock, workspace.accentColor ? { borderColor: workspace.accentColor } : {}]}
+            style={[
+              styles.approvalBlock,
+              workspace.accentColor ? { borderColor: workspace.accentColor } : {},
+            ]}
           >
             <Text style={styles.approvalTitle}>NON-STANDARD PRICING — LEADERSHIP REVIEW</Text>
             {result.triggers.map((tr, index) => (
