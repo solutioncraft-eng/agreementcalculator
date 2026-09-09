@@ -89,6 +89,7 @@ interface ItemView {
   id: string;
   label: string;
   vendor: string | null;
+  category: string | null;
   unit: string;
   tierKeys: string[];
   unitCost: number;
@@ -575,7 +576,7 @@ export function VersionEditor({
                       )}
                     </p>
                     <p className="text-[13px] text-slate">
-                      {item.vendor ?? "No vendor"} ·{" "}
+                      {item.vendor ?? "No vendor"} · {item.category ?? "Uncategorised"} ·{" "}
                       {UNITS.find((u) => u.value === item.unit)?.label ?? item.unit}
                     </p>
                     <div className="mt-2 flex flex-wrap gap-1">
@@ -1071,6 +1072,13 @@ function ItemForm({
       {item ? <input type="hidden" name="itemId" value={item.id} /> : null}
       <Field name="label" label="Item" defaultValue={item?.label} placeholder="Security Tool" />
       <Field name="vendor" label="Vendor" defaultValue={item?.vendor ?? ""} placeholder="Vendor" />
+      <Field
+        name="category"
+        label="Quote heading"
+        defaultValue={item?.category ?? ""}
+        placeholder="Security & Threat Protection"
+        hint="Groups the item on customer-facing quotes. Leave blank to guess from the name."
+      />
       <div>
         <label className="label" htmlFor={`unit-${item?.id ?? "new"}`}>
           Basis

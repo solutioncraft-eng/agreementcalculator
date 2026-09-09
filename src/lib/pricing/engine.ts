@@ -80,6 +80,8 @@ export interface CogsLine {
   key: string;
   label: string;
   vendor?: string | null;
+  /** Customer-facing heading this item is listed under; null is guessed from the label. */
+  category?: string | null;
   unit: Unit;
   /** Every offering this item is assigned to, by ServiceTier.key. */
   tierKeys: string[];

@@ -29,6 +29,7 @@ export function toConfig(version: VersionWithChildren): PricingConfig {
       key: item.key,
       label: item.label,
       vendor: item.vendor,
+      category: item.category,
       unit: item.unit,
       tierKeys: item.tiers.map((tier) => tier.tierKey),
       unitCost: item.unitCost.toNumber(),

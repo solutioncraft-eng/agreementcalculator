@@ -88,6 +88,7 @@ async function main() {
           tenantId: tenant.id,
           key: item.key,
           label: item.label,
+          category: item.category,
           unit: item.unit,
           tiers: {
             create: item.tierKeys.map((tierKey) => ({ tenantId: tenant.id, tierKey })),

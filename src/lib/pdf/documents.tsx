@@ -7,13 +7,13 @@ import {
   includedLines,
   money,
   moneyRounded,
-  ratesDiffer,
   standardRateLabel,
   tierChain,
   tierResultFor,
 } from "@/lib/pricing/engine";
 import { approvalLabel, type StampInfo } from "./stamp";
-import { displayPhone, displayWebsite } from "./format";
+import { displayPhone } from "./format";
+import { groupInclusions } from "./included";
 import { brand, styles } from "./theme";
 
 export { approvalLabel, type ApprovalRecord, type ApprovalState, type StampInfo } from "./stamp";
@@ -67,26 +67,37 @@ function utc(d: Date): string {
   return `${d.toISOString().slice(0, 16).replace("T", " ")} UTC`;
 }
 
-/** "Dana Reyes · dana@acme.com", or whichever half exists. */
-function contactLine(name?: string | null, email?: string | null): string | null {
-  return [name, email].filter(Boolean).join(" · ") || null;
+/** "September 9, 2026" — the customer-facing date; the audit stamp keeps UTC. */
+function longDate(d: Date): string {
+  return d.toLocaleDateString("en-US", { timeZone: "UTC", month: "long", day: "numeric", year: "numeric" });
 }
 
-function contactRows(customer?: DocCustomer): { label: string; value: string }[] {
-  const rows = [
-    { label: "Phone", value: displayPhone(customer?.contactPhone) },
-    {
-      label: "Technical contact",
-      value: contactLine(customer?.technicalContactName, customer?.technicalContactEmail),
-    },
-    {
-      label: "Executive sponsor",
-      value: contactLine(customer?.executiveContactName, customer?.executiveContactEmail),
-    },
-  ];
-  return rows.filter((row): row is { label: string; value: string } => Boolean(row.value));
+interface ContactRow {
+  name: string;
+  role: string;
+  email?: string | null;
 }
 
+function contactRows(customer?: DocCustomer): ContactRow[] {
+  const rows: ContactRow[] = [];
+  if (customer?.technicalContactName) {
+    rows.push({
+      name: customer.technicalContactName,
+      role: "technical contact",
+      email: customer.technicalContactEmail,
+    });
+  }
+  if (customer?.executiveContactName) {
+    rows.push({
+      name: customer.executiveContactName,
+      role: "executive sponsor",
+      email: customer.executiveContactEmail,
+    });
+  }
+  return rows;
+}
+
+/** Internal documents: workspace logo, document title, plain client name, export stamp. */
 function Header({
   stamp,
   clientName,
@@ -94,8 +105,6 @@ function Header({
   workspaceName,
   logo,
   accentColor,
-  customer,
-  customerLogo,
 }: {
   stamp: StampInfo;
   clientName: string;
@@ -103,51 +112,108 @@ function Header({
   workspaceName: string;
   logo?: Buffer;
   accentColor?: string | null;
-  customer?: DocCustomer;
-  customerLogo?: Buffer;
 }) {
-  const contacts = contactRows(customer);
-  const customerFacing = Boolean(customerLogo || customer?.website || contacts.length);
-
   return (
     <View style={styles.headerRow}>
-      <View style={styles.headerLeft}>
+      <View>
         {/* eslint-disable-next-line jsx-a11y/alt-text -- react-pdf Image has no alt prop */}
         {logo ? <Image style={styles.logo} src={logo} /> : <Text style={styles.title}>{workspaceName}</Text>}
         <Text style={[styles.eyebrow, accentColor ? { color: accentColor } : {}]}>{title.toUpperCase()}</Text>
-        {customerFacing ? (
-          <View style={styles.customerBlock}>
-            {customerLogo ? (
-              // eslint-disable-next-line jsx-a11y/alt-text -- react-pdf Image has no alt prop
-              <Image style={styles.customerLogo} src={customerLogo} />
-            ) : null}
-            <View>
-              <Text style={styles.metaLine}>Prepared for</Text>
-              <Text style={styles.customerName}>{clientName}</Text>
-              {customer?.website ? (
-                <Text style={styles.customerWebsite}>{displayWebsite(customer.website)}</Text>
-              ) : null}
-            </View>
-          </View>
-        ) : (
-          <Text style={styles.title}>{clientName}</Text>
-        )}
+        <Text style={styles.title}>{clientName}</Text>
       </View>
       <View style={styles.headerRight}>
         <Text style={styles.metaLine}>Prepared {utc(stamp.exportedAt)}</Text>
         <Text style={styles.metaLine}>By {stamp.exportedBy}</Text>
         <Text style={styles.metaLine}>Pricing version {stamp.pricingVersion}</Text>
         {stamp.quoteRef ? <Text style={styles.metaLine}>Quote {stamp.quoteRef}</Text> : null}
-        {contacts.length ? (
-          <View style={styles.contacts}>
-            {contacts.map((row) => (
-              <Text key={row.label} style={styles.contactValue}>
-                <Text style={styles.contactLabel}>{row.label} </Text>
-                {row.value}
-              </Text>
-            ))}
-          </View>
-        ) : null}
+      </View>
+    </View>
+  );
+}
+
+/**
+ * Customer-facing header: the customer leads (logo + name), the provider sits
+ * small on the right with who prepared the document and when.
+ */
+function ClientHeader({
+  stamp,
+  clientName,
+  workspaceName,
+  logo,
+  accentColor,
+  customerLogo,
+}: {
+  stamp: StampInfo;
+  clientName: string;
+  workspaceName: string;
+  logo?: Buffer;
+  accentColor?: string | null;
+  customerLogo?: Buffer;
+}) {
+  return (
+    <View>
+      <Text style={[styles.eyebrow, accentColor ? { color: accentColor } : {}]}>
+        MANAGED SERVICES PROPOSAL
+      </Text>
+      <View style={styles.clientHeaderRow}>
+        <View style={styles.clientIdentity}>
+          {customerLogo ? (
+            // eslint-disable-next-line jsx-a11y/alt-text -- react-pdf Image has no alt prop
+            <Image style={styles.clientLogo} src={customerLogo} />
+          ) : null}
+          <Text style={styles.clientName}>{clientName}</Text>
+        </View>
+        <View style={styles.providerBlock}>
+          {logo ? (
+            // eslint-disable-next-line jsx-a11y/alt-text -- react-pdf Image has no alt prop
+            <Image style={styles.providerLogo} src={logo} />
+          ) : (
+            <Text style={styles.providerName}>{workspaceName}</Text>
+          )}
+          <Text style={styles.metaLine}>Prepared {longDate(stamp.exportedAt)}</Text>
+          <Text style={styles.metaLine}>by {stamp.exportedBy}</Text>
+        </View>
+      </View>
+      <View style={styles.rule} />
+    </View>
+  );
+}
+
+/** Customer-facing footer: their contacts on the left, terms and the document reference on the right. */
+function ClientFooter({
+  stamp,
+  workspace,
+  customer,
+}: {
+  stamp: StampInfo;
+  workspace: DocWorkspace;
+  customer?: DocCustomer;
+}) {
+  const contacts = contactRows(customer);
+  const reference = [
+    `Pricing version ${stamp.pricingVersion} (${stamp.costBasis})`,
+    `Ref ${stamp.exportId}`,
+    displayPhone(customer?.contactPhone),
+  ].filter(Boolean);
+  return (
+    <View style={styles.clientFooter} fixed>
+      <View style={styles.clientFooterLeft}>
+        {contacts.map((row) => (
+          <Text key={row.role} style={styles.footerContact}>
+            <Text style={styles.footerContactName}>{row.name}</Text>
+            {`  \u00b7  ${row.role}`}
+            {row.email ? `  \u00b7  ${row.email}` : ""}
+          </Text>
+        ))}
+      </View>
+      <View style={styles.clientFooterRight}>
+        <Text>
+          Rates assume the environment counts shown and are subject to quarterly true-up. Mailbox count
+          assumed equal to user count. This document is a proposal, not an invoice, and does not constitute a
+          contract until countersigned.
+        </Text>
+        {workspace.footer ? <Text>{workspace.footer}</Text> : null}
+        <Text style={{ marginTop: 3 }}>{reference.join("  \u00b7  ")}</Text>
       </View>
     </View>
   );
@@ -235,6 +301,9 @@ export function buildDocument(docType: DocType, props: DocProps): ReactElement<D
   return element as unknown as ReactElement<DocumentProps>;
 }
 
+const NEXT_STEP =
+  "confirm the user and device counts above, and we'll issue the agreement for signature with your preferred start date.";
+
 export function QuoteDocument({
   result,
   tierKey,
@@ -248,132 +317,92 @@ export function QuoteDocument({
 }: DocProps) {
   const t = tierResultFor(result, tierKey);
   const tierName = t.label;
-  const lower = result.tiers[t.index - 1];
-  const others = result.tiers.filter((tier) => tier.key !== t.key);
   const accent = workspace.accentColor ?? brand.orange;
+  const groups = groupInclusions(includedLines(result, t.key));
+  const counts: [string, string][] = [
+    ["USERS", String(result.inputs.users)],
+    ["DEVICES", String(result.inputs.devices)],
+    ["LOCATIONS", String(result.inputs.locations)],
+  ];
 
   return (
     <Document
-      title={`${clientName} — ${tierName} agreement`}
+      title={`${clientName} — ${tierName}`}
       author={workspace.name}
-      subject={`Agreement summary · pricing version ${stamp.pricingVersion}`}
+      subject={`Managed services proposal · pricing version ${stamp.pricingVersion}`}
       creator={`Agreement Calculator ${stamp.appVersion}`}
       producer={`Agreement Calculator ${stamp.appVersion}`}
       keywords={`export:${stamp.exportId} pricing:${stamp.pricingVersion} approval:${approvalLabel(stamp)}`}
     >
-      <Page size="LETTER" style={styles.page}>
-        <Header
+      <Page size="LETTER" style={styles.clientPage}>
+        <ClientHeader
           stamp={stamp}
           clientName={clientName}
-          title="Managed services agreement"
           workspaceName={workspace.name}
           logo={logo}
           accentColor={accent}
-          customer={customer}
           customerLogo={customerLogo}
         />
-        <Text style={styles.confidential}>PROPOSED MONTHLY INVESTMENT · {tierName.toUpperCase()}</Text>
 
-        <MetaGrid result={result} />
+        <Text style={styles.investmentEyebrow}>PROPOSED MONTHLY INVESTMENT</Text>
+        <Text style={styles.tierTitle}>{tierName}</Text>
 
-        <View style={styles.highlight}>
-          <View>
-            <Text style={styles.highlightLabel}>MONTHLY AGREEMENT RATE</Text>
-            <Text style={styles.highlightValue}>{moneyRounded(t.headlineRate)}</Text>
-          </View>
-          <View>
-            <Text style={[styles.highlightSub, { color: accent }]}>
-              {money(t.headlinePerUser)} per user / month
+        <View style={styles.investmentCard}>
+          <View style={styles.rateCell}>
+            <Text style={styles.metaLabel}>MONTHLY AGREEMENT RATE</Text>
+            <View style={styles.rateLine}>
+              <Text style={styles.rateValue}>{moneyRounded(t.headlineRate)}</Text>
+              <Text style={styles.rateUnit}> / mo</Text>
+            </View>
+            <Text style={[styles.ratePerUser, { color: accent }]}>
+              {money(t.headlinePerUser)} per user per month
             </Text>
+          </View>
+          <View style={styles.countsCell}>
+            {counts.map(([label, value]) => (
+              <View key={label} style={styles.countCell}>
+                <Text style={styles.metaLabel}>{label}</Text>
+                <Text style={styles.countValue}>{value}</Text>
+              </View>
+            ))}
           </View>
         </View>
 
+        {result.bundle.discountPct > 0 ? (
+          <Text style={styles.bundleNote}>
+            Includes the {result.bundle.label} agreement discount of {result.bundle.discountPct}%.
+          </Text>
+        ) : null}
+
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>WHAT IS INCLUDED</Text>
-          {lower ? (
-            <>
-              <Text>
-                Everything in {lower.label} — 24/7 monitoring and remediation, patching, endpoint protection,
-                email security, vulnerability management, network monitoring, and unlimited remote support —
-                plus what {tierName} adds:
-              </Text>
-              <View style={{ marginTop: 6 }}>
-                {t.lines.map((l) => (
-                  <View key={l.key} style={styles.row}>
-                    <Text>{l.label}</Text>
-                    <Text style={styles.rowMuted}>{UNIT_LABEL[l.unit]}</Text>
+          <Text style={styles.sectionTitle}>WHAT&apos;S INCLUDED</Text>
+          <Text style={styles.includedIntro}>
+            Every service below is covered by the monthly rate — no per-incident charges, no add-on line
+            items.
+          </Text>
+          <View style={styles.groupGrid}>
+            {groups.map((group) => (
+              <View key={group.category} style={styles.groupCell} wrap={false}>
+                <Text style={styles.groupTitle}>{group.category}</Text>
+                {group.items.map((item) => (
+                  <View key={item} style={styles.bulletRow}>
+                    <View style={[styles.bullet, { backgroundColor: accent }]} />
+                    <Text style={styles.bulletText}>{item}</Text>
                   </View>
                 ))}
               </View>
-            </>
-          ) : (
-            <Text>
-              24/7 monitoring and remediation, patching and lifecycle management, managed endpoint protection,
-              email security, vulnerability management, network monitoring, privileged access control, and
-              unlimited remote support for the environment shown above.
-            </Text>
-          )}
+            ))}
+          </View>
         </View>
 
-        {others.length ? (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>
-              {others.length === 1 ? "ALTERNATIVE OFFERING" : "ALTERNATIVE OFFERINGS"}
-            </Text>
-            {others.map((other) => {
-              // Signed off the rates, not the offering order: an offering
-              // further up the ladder can still land on a cheaper rate.
-              const step = other.headlineRate - t.headlineRate;
-              return (
-                <View key={other.key}>
-                  <View style={styles.row}>
-                    <Text>{other.label}</Text>
-                    <Text>
-                      {moneyRounded(other.headlineRate)} / month · {money(other.headlinePerUser)} per user
-                    </Text>
-                  </View>
-                  <Text style={[styles.rowMuted, { marginTop: 2 }]}>
-                    {ratesDiffer(other.headlineRate, t.headlineRate)
-                      ? // ASCII hyphen, not U+2212: the built-in Helvetica these
-                        // documents use is WinAnsi-encoded and renders a real
-                        // minus sign as nothing at all.
-                        `${step > 0 ? "+" : "-"}${moneyRounded(Math.abs(step))} per month against ${tierName}.`
-                      : `Same monthly rate as ${tierName}.`}
-                  </Text>
-                </View>
-              );
-            })}
-          </View>
-        ) : null}
-
-        {result.bundle.discountPct > 0 ? (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>BUNDLE</Text>
-            <View style={styles.row}>
-              <Text>{result.bundle.label}</Text>
-              <Text>{result.bundle.discountPct}% agreement discount applied</Text>
-            </View>
-          </View>
-        ) : null}
-
-        {notes ? (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>NOTES</Text>
-            <Text style={styles.notes}>{notes}</Text>
-          </View>
-        ) : null}
-
-        <View style={styles.section}>
-          <Text style={[styles.rowMuted, { fontSize: 8 }]}>
-            Rates assume the environment counts shown and are subject to a quarterly true-up. Mailbox count is
-            assumed equal to user count. This document is a proposal, not an invoice, and does not constitute
-            a contract until countersigned.
+        <View style={[styles.nextStep, { borderLeftColor: accent }]} wrap={false}>
+          <Text>
+            <Text style={styles.nextStepLabel}>Next step: </Text>
+            {notes?.trim() || NEXT_STEP}
           </Text>
         </View>
 
-        <ApprovalTimeline stamp={stamp} />
-
-        <Stamp stamp={stamp} workspace={workspace} />
+        <ClientFooter stamp={stamp} workspace={workspace} customer={customer} />
       </Page>
     </Document>
   );
