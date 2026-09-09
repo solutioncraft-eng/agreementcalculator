@@ -119,7 +119,7 @@ export async function fetchCustomers(
 ): Promise<MspCadenceCustomer[]> {
   const data = await call<{ clients: DirectoryClient[] }>({
     tenant_id: mspCadenceTenantId,
-    query,
+    q: query,
     limit,
   });
   return (data.clients ?? []).map(toCustomer);
