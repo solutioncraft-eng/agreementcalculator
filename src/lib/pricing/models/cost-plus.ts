@@ -16,6 +16,7 @@ import {
   bundleFor,
   money,
   overrideTriggers,
+  premiumTriggers,
   priceTiers,
   round2,
   type CalcInputs,
@@ -67,7 +68,7 @@ function calculate(
       message: `Minimum per-user floor changed from ${money(s.minPerUserFloor)} to ${money(inputs.perUserFloor)}`,
     });
   }
-  triggers.push(...belowFloorTriggers(tiers), ...overrideTriggers(tiers));
+  triggers.push(...belowFloorTriggers(tiers), ...premiumTriggers(tiers, config.tiers), ...overrideTriggers(tiers));
   if (inputs.floorOverride) {
     triggers.push({ code: "FLOOR_OVERRIDE", message: "Floor overridden — actual below-floor rate in use" });
   }
@@ -109,6 +110,7 @@ export const costPlusModel: PricingModelAdapter<CostPlusSettings> = {
   startingInputs: (s) => ({
     sgmPct: s.defaultSgmPct,
     perUserFloor: s.minPerUserFloor,
+    premiumPct: null,
     addonMultiplier: s.addonMultiplier,
     markupMultiple: 1,
     floorOverride: false,

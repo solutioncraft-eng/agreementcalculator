@@ -48,6 +48,9 @@ export default async function PricingVersionPage({ params }: { params: Promise<{
           description: tier.description,
           parentKey: tier.parentKey,
           coManaged: tier.coManaged,
+          premium: tier.premium,
+          premiumPct: tier.premiumPct?.toNumber() ?? null,
+          minUsers: tier.minUsers,
           override: {
             perUser: tier.overridePerUser?.toNumber() ?? null,
             perDevice: tier.overridePerDevice?.toNumber() ?? null,

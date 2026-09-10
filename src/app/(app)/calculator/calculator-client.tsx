@@ -71,6 +71,14 @@ export function CalculatorClient({
 
   const selected = tierResultFor(result, tierKey);
   const actualSgmPct = achievedSgmPct(selected);
+  // An offering the client is too small for cannot stay selected as the seat
+  // count moves, so the quote falls back to the first one that does sell.
+  const firstAvailable = result.tiers.find((tierResult) => tierResult.available)?.key;
+  useEffect(() => {
+    if (!selected.available && firstAvailable) setTierKey(firstAvailable);
+  }, [selected.available, firstAvailable]);
+  // The share only exists where the version measures something against premium.
+  const sharesPremium = result.tiers.some((tierResult) => tierResult.premiumPct !== null);
   // The root of the selected offering's chain: everything above it is an add-on.
   const baseKey = tierChain(result.tiers, selected.key)[0]?.key;
 
@@ -254,6 +262,31 @@ export function CalculatorClient({
                 </div>
               </div>
 
+              {sharesPremium ? (
+                <div>
+                  <label className="label" htmlFor="premiumPct">
+                    Share of premium (%)
+                  </label>
+                  <input
+                    id="premiumPct"
+                    type="number"
+                    min={1}
+                    max={100}
+                    step={1}
+                    value={inputs.premiumPct ?? ""}
+                    placeholder={selected.premiumPct === null ? "As configured" : String(selected.premiumPct)}
+                    onChange={(e) =>
+                      set("premiumPct", e.target.value === "" ? null : Number(e.target.value))
+                    }
+                    className={clsx("field mt-1", inputs.premiumPct !== null && "field-alert")}
+                  />
+                  <p className="mt-1 text-[12px] text-slate">
+                    What co-managed offerings sell for as a share of the premium agreement. Blank holds each
+                    to the share its offering carries; changing it needs leadership review.
+                  </p>
+                </div>
+              ) : null}
+
               <label className="flex items-start gap-3 text-[14px]">
                 <input
                   type="checkbox"
@@ -436,6 +469,15 @@ export function CalculatorClient({
                       value={money(selected.headlineRate - selected.discountedRate)}
                     />
                   ) : null}
+                  {selected.premiumTarget !== null ? (
+                    <Line
+                      muted
+                      label={`${selected.premiumPct}% of the premium offering${
+                        selected.belowPremiumPct ? " — quoted under it" : ""
+                      }`}
+                      value={money(selected.premiumTarget)}
+                    />
+                  ) : null}
                   <Line label="Agreement rate" value={money(selected.headlineRate)} strong />
                   <Line label="Actual gross margin" value={`${actualSgmPct}%`} strong />
                 </dl>
@@ -521,6 +563,7 @@ export function CalculatorClient({
                   <input type="hidden" name="locations" value={inputs.locations} />
                   <input type="hidden" name="sgmPct" value={inputs.sgmPct} />
                   <input type="hidden" name="perUserFloor" value={inputs.perUserFloor} />
+                  <input type="hidden" name="premiumPct" value={inputs.premiumPct ?? ""} />
                   <input type="hidden" name="floorOverride" value={String(inputs.floorOverride)} />
                   <input type="hidden" name="addonMultiplier" value={inputs.addonMultiplier} />
                   <input type="hidden" name="markupMultiple" value={inputs.markupMultiple} />
@@ -799,33 +842,55 @@ function TierCard({
   onSelect: () => void;
   footnote?: string;
 }) {
+  const available = tierResult.available;
   return (
     <button
       type="button"
       onClick={onSelect}
+      disabled={!available}
+      aria-disabled={!available}
       className={clsx(
         "rounded-brand border p-5 text-left transition",
-        selected ? "border-orange bg-navy text-white" : "border-mist bg-white hover:border-slate",
+        !available
+          ? "cursor-not-allowed border-mist bg-paper text-slate opacity-60"
+          : selected
+            ? "border-orange bg-navy text-white"
+            : "border-mist bg-white hover:border-slate",
       )}
     >
-      <p className={clsx("eyebrow", selected && "text-orange")}>
-        {selected ? "Selected offering" : "Offering"}
+      <p className={clsx("eyebrow", selected && available && "text-orange")}>
+        {!available ? "Unavailable" : selected ? "Selected offering" : "Offering"}
       </p>
-      <h3 className={clsx("mt-2 text-[20px]", selected && "text-white")}>{name}</h3>
-      <p className={clsx("text-[13px]", selected ? "text-mist" : "text-slate")}>{blurb}</p>
-      <p className={clsx("mt-4 font-display text-[34px] font-bold leading-none", selected ? "text-white" : "text-navy")}>
+      <h3 className={clsx("mt-2 text-[20px]", selected && available && "text-white")}>{name}</h3>
+      <p className={clsx("text-[13px]", selected && available ? "text-mist" : "text-slate")}>{blurb}</p>
+      <p
+        className={clsx(
+          "mt-4 font-display text-[34px] font-bold leading-none",
+          selected && available ? "text-white" : "text-navy",
+        )}
+      >
         {moneyRounded(tierResult.headlineRate)}
       </p>
-      <p className={clsx("mt-1 text-[13px]", selected ? "text-orange" : "text-slate")}>
+      <p className={clsx("mt-1 text-[13px]", selected && available ? "text-orange" : "text-slate")}>
         {money(tierResult.headlinePerUser)} per user / month
       </p>
+      {!available && tierResult.minUsers !== null ? (
+        <p className="mt-2 font-display text-[11px] font-bold uppercase tracking-eyebrow text-orange-dark">
+          Needs {tierResult.minUsers} users or more
+        </p>
+      ) : null}
+      {available && tierResult.belowPremiumPct && tierResult.premiumTarget !== null ? (
+        <p className="mt-2 font-display text-[11px] font-bold uppercase tracking-eyebrow text-orange">
+          Under {tierResult.premiumPct}% of premium ({moneyRounded(tierResult.premiumTarget)})
+        </p>
+      ) : null}
       {tierResult.belowFloor ? (
         <p className="mt-2 font-display text-[11px] font-bold uppercase tracking-eyebrow text-orange">
           Floor rate applied
         </p>
       ) : null}
       {footnote ? (
-        <p className={clsx("mt-2 text-[12px]", selected ? "text-mist" : "text-slate")}>{footnote}</p>
+        <p className={clsx("mt-2 text-[12px]", selected && available ? "text-mist" : "text-slate")}>{footnote}</p>
       ) : null}
     </button>
   );

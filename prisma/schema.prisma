@@ -302,6 +302,21 @@ model ServiceTier {
   /// imputed labor multiple, or a lower markup) instead of the main one.
   coManaged Boolean @default(false)
 
+  /// The offering every co-managed offering in the version is priced against.
+  /// Exactly one offering per version carries it.
+  premium Boolean @default(false)
+
+  /// Share of the premium offering's rate this co-managed offering is expected
+  /// to hold, percent — 65 means "65% of premium", i.e. 35% off it. Anything
+  /// under it needs leadership review. Null on offerings that are not
+  /// co-managed, and on co-managed ones saved before a premium was chosen.
+  premiumPct Decimal? @db.Decimal(5, 2)
+
+  /// Fewest users the offering sells to. A quote under it cannot select the
+  /// offering: a co-managed agreement only works at the seat count that funds
+  /// the client's own IT staff. Null sells at any size.
+  minUsers Int?
+
   /// Optional flat-rate override: when any of these is set, the offering's
   /// standard rate is the sum of them times the quote's environment instead of
   /// the model's formula. The COGS cost floor still applies underneath.
@@ -411,6 +426,9 @@ model QuoteRequest {
   sgmPct          Decimal @db.Decimal(5, 2)
   perUserFloor    Decimal @db.Decimal(10, 2)
   floorOverride   Boolean @default(false)
+  /// Share of the premium offering the account manager held co-managed
+  /// offerings to, percent. Null when the quote used each offering's own.
+  premiumPct      Decimal? @db.Decimal(5, 2)
   addonMultiplier Decimal @db.Decimal(6, 2)
   markupMultiple  Decimal @db.Decimal(6, 2)
   bundleKey        String

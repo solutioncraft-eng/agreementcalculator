@@ -15,6 +15,14 @@ export const calcInputsSchema = z.object({
   locations: z.coerce.number().int().min(0).max(5_000),
   sgmPct: z.coerce.number().min(0).max(95),
   perUserFloor: z.coerce.number().min(0).max(10_000),
+  /**
+   * Share of the premium offering co-managed offerings are held to, percent.
+   * Blank follows the share each offering carries.
+   */
+  premiumPct: z.preprocess(
+    (value) => (value === "" || value === undefined ? null : value),
+    z.coerce.number().min(1).max(100).nullable(),
+  ),
   floorOverride: z.coerce.boolean(),
   addonMultiplier: z.coerce.number().min(1, "Add-on multiplier must be at least 1× cost.").max(20),
   markupMultiple: z.coerce.number().min(1, "Markup must be at least 1× cost.").max(50),
@@ -121,6 +129,25 @@ export const serviceTierSchema = z.object({
   parentKey: tierKeySchema.optional().or(z.literal("")),
   /** Delivered alongside the client's IT staff; priced with the co-managed lever. */
   coManaged: z.coerce.boolean().default(false),
+  /** The offering co-managed offerings are measured against. One per version. */
+  premium: z.coerce.boolean().default(false),
+  /**
+   * Share of the premium offering's rate this co-managed offering is expected to
+   * hold, percent: 65 for a helpdesk level agreement, 53 for a higher-tier one.
+   * Blank leaves the offering measured by the per-user floor instead.
+   */
+  premiumPct: z.preprocess(
+    (value) => (value === "" || value === undefined ? null : value),
+    z.coerce.number().min(1).max(100).nullable(),
+  ),
+  /**
+   * Fewest users the offering sells to. Blank sells at any size; a quote under
+   * it cannot select the offering.
+   */
+  minUsers: z.preprocess(
+    (value) => (value === "" || value === undefined ? null : value),
+    z.coerce.number().int().min(0).max(100_000).nullable(),
+  ),
   /**
    * Flat-rate override components. Blank means "none"; any positive component
    * makes the offering sell for the sum instead of the model's formula.

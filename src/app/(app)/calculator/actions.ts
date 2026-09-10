@@ -28,6 +28,7 @@ export async function submitForReview(_prev: SubmitState, formData: FormData): P
       locations: formData.get("locations"),
       sgmPct: formData.get("sgmPct"),
       perUserFloor: formData.get("perUserFloor"),
+      premiumPct: formData.get("premiumPct") ?? undefined,
       floorOverride: formData.get("floorOverride") === "true",
       addonMultiplier: formData.get("addonMultiplier"),
       markupMultiple: formData.get("markupMultiple"),
@@ -51,6 +52,11 @@ export async function submitForReview(_prev: SubmitState, formData: FormData): P
   if (!tier) {
     return { error: "That offering is not part of the published pricing version — reload the calculator." };
   }
+  if (!tier.available) {
+    return {
+      error: `${tier.label} sells to ${tier.minUsers} users or more — this quote has ${inputs.users}.`,
+    };
+  }
   const tierRates = tierRatesFrom(result.tiers);
   const quote = await db.quoteRequest.create({
     data: {
@@ -63,6 +69,7 @@ export async function submitForReview(_prev: SubmitState, formData: FormData): P
       locations: inputs.locations,
       sgmPct: inputs.sgmPct,
       perUserFloor: inputs.perUserFloor,
+      premiumPct: inputs.premiumPct,
       floorOverride: inputs.floorOverride,
       addonMultiplier: inputs.addonMultiplier,
       markupMultiple: inputs.markupMultiple,

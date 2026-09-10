@@ -59,6 +59,9 @@ export function toConfig(version: VersionWithChildren): PricingConfig {
       sortOrder: tier.sortOrder,
       parentKey: tier.parentKey,
       coManaged: tier.coManaged,
+      premium: tier.premium,
+      premiumPct: tier.premiumPct?.toNumber() ?? null,
+      minUsers: tier.minUsers,
       rateOverride: {
         perUser: tier.overridePerUser?.toNumber() ?? 0,
         perDevice: tier.overridePerDevice?.toNumber() ?? 0,

@@ -27,6 +27,13 @@
  * markup) instead of the main one. A *rate override* replaces the formula with
  * a flat rate per user / device / location / agreement the admin set on the
  * offering; the COGS cost floor, bundle cap and per-user floor still apply.
+ *
+ * One offering per version is the *premium* agreement. A co-managed offering is
+ * measured against it rather than against the per-user floor: it carries the
+ * share of the premium rate it is expected to hold — 65% for a helpdesk level
+ * agreement, 53% for a higher-tier one — and a rate under that share is flagged
+ * for leadership rather than lifted, because the co-managed formula sets the
+ * price and the share is the policy on it.
  */
 
 export type Unit = "USER" | "DEVICE" | "LOCATION" | "FLAT";
@@ -42,6 +49,19 @@ export interface ServiceTierDef {
   parentKey?: string | null;
   /** Delivered alongside the client's IT staff; prices with the co-managed lever. */
   coManaged?: boolean;
+  /** The offering co-managed offerings are measured against. One per version. */
+  premium?: boolean;
+  /**
+   * Share of the premium offering's rate this co-managed offering is expected to
+   * hold, percent: 65 means it sells for 65% of premium, i.e. 35% off it. Null
+   * or undefined leaves the offering measured by the per-user floor instead.
+   */
+  premiumPct?: number | null;
+  /**
+   * Fewest users the offering sells to. A quote under it cannot select the
+   * offering. Null/undefined sells at any size.
+   */
+  minUsers?: number | null;
   /** Flat rate that replaces the formula. Null/undefined when priced from cost. */
   rateOverride?: RateOverride | null;
   /**
@@ -155,6 +175,11 @@ export interface CalcInputs {
   floorOverride: boolean;
   bundleKey: string;
   perUserFloor: number;
+  /**
+   * Share of the premium offering this quote holds co-managed offerings to,
+   * percent. Null follows each offering's own share.
+   */
+  premiumPct: number | null;
   /** COST_PLUS: service gross margin, percent. */
   sgmPct: number;
   /** COST_PLUS: multiplier on low-touch add-on tools. */
@@ -173,7 +198,9 @@ export type TriggerCode =
   | "MARKUP_BELOW_DEFAULT"
   | "MARKUP_BELOW_MINIMUM"
   | "DISCOUNT_OVER_MAX"
-  | "OVERRIDE_BELOW_COST";
+  | "OVERRIDE_BELOW_COST"
+  | "BELOW_PREMIUM_PCT"
+  | "PREMIUM_PCT_CHANGED";
 
 export interface Trigger {
   code: TriggerCode;
@@ -217,6 +244,20 @@ export interface TierResult {
   belowFloor: boolean;
   /** The per-user floor this offering was held to: the quote's, or its own. */
   perUserFloor: number;
+  /**
+   * Share of the premium offering this co-managed offering is held to, percent.
+   * Null when it is not measured against premium — every fully managed
+   * offering, and a co-managed one in a version with no premium chosen.
+   */
+  premiumPct: number | null;
+  /** The rate `premiumPct` of the premium offering comes to. Null with no share. */
+  premiumTarget: number | null;
+  /** The standard rate sits under `premiumTarget`. */
+  belowPremiumPct: boolean;
+  /** Fewest users this offering sells to. Null sells at any size. */
+  minUsers: number | null;
+  /** The quote's user count reaches `minUsers`, so the offering can be sold. */
+  available: boolean;
   discountCappedAtCost: boolean;
   /** This tier's own COGS lines. Its parent chain carries the rest. */
   lines: LineResult[];
@@ -409,6 +450,18 @@ export function tierFloor(def: Pick<ServiceTierDef, "perUserFloor">, inputs: Cal
   return def.perUserFloor ?? inputs.perUserFloor;
 }
 
+/**
+ * Share of the premium offering a co-managed offering is held to, percent: the
+ * quote's when the account manager set one, else the offering's own. Null on
+ * anything not measured against premium.
+ */
+export function premiumShare(
+  def: Pick<ServiceTierDef, "premiumPct">,
+  inputs: CalcInputs,
+): number | null {
+  return inputs.premiumPct ?? def.premiumPct ?? null;
+}
+
 /** Per-user floor handling, shared by every model. */
 export function applyFloor(rate: number, inputs: CalcInputs, perUserFloor = inputs.perUserFloor) {
   const users = Math.max(inputs.users, 1);
@@ -448,7 +501,7 @@ export function priceTiers(
   const users = Math.max(inputs.users, 1);
   const floorRate = inputs.perUserFloor * users;
 
-  const tiers = defs.map((def, index) => {
+  const priced = defs.map((def, index) => {
     const chain = tierChain(defs, def.key);
     const lines = linesFor(config, def.key, inputs);
 
@@ -474,8 +527,40 @@ export function priceTiers(
       ? overrideRate(override, inputs)
       : baseTool * base.baseMultiplier + addonTool * pricing.addonMultiplier;
     const bundle = applyBundle(standardRate, costFloor, pricing.bundlePct);
-    const perUserFloor = tierFloor(def, inputs);
+
+    return { def, index, chain, lines, coManaged, override, baseTool, addonTool, costFloor, standardRate, bundle };
+  });
+
+  // The premium offering's rate before any bundle discount, held to its own
+  // per-user floor: what a co-managed offering's share is a share of.
+  const premium = priced.find((entry) => entry.def.premium === true);
+  const premiumBasis = premium
+    ? applyFloor(premium.standardRate, inputs, tierFloor(premium.def, inputs)).headlineRate
+    : null;
+
+  const tiers = priced.map((entry) => {
+    const { def, index, chain, lines, coManaged, override, baseTool, addonTool, costFloor, standardRate, bundle } =
+      entry;
+
+    // A co-managed offering is measured against the premium offering rather than
+    // the per-user floor. With no premium chosen — every version published
+    // before premium offerings existed — the floor still holds it.
+    const share = coManaged && def.premium !== true ? premiumShare(def, inputs) : null;
+    const measuredOnPremium = share !== null && premiumBasis !== null;
+    const premiumTarget = measuredOnPremium ? round2((premiumBasis * share) / 100) : null;
+
+    const perUserFloor = measuredOnPremium ? 0 : tierFloor(def, inputs);
     const floor = applyFloor(bundle.final, inputs, perUserFloor);
+
+    // An offering built on one with a minimum inherits it: it cannot be sold
+    // where its own base cannot.
+    const minUsers = chain.reduce<number | null>(
+      (lowest, member) =>
+        member.minUsers === null || member.minUsers === undefined
+          ? lowest
+          : Math.max(lowest ?? 0, member.minUsers),
+      null,
+    );
 
     return {
       key: def.key,
@@ -495,6 +580,11 @@ export function priceTiers(
       headlinePerUser: floor.headlineRate / users,
       belowFloor: floor.belowFloor,
       perUserFloor,
+      premiumPct: measuredOnPremium ? share : null,
+      premiumTarget,
+      minUsers,
+      available: minUsers === null || inputs.users >= minUsers,
+      belowPremiumPct: premiumTarget !== null && round2(standardRate) < premiumTarget,
       discountCappedAtCost: bundle.capped,
       lines,
     };
@@ -551,6 +641,35 @@ export function discountCappedTriggers(tiers: TierResult[], floorName: string): 
       tierKey: tier.key,
       message: `${tier.label} bundle discount capped at ${floorName}`,
     }));
+}
+
+/**
+ * One trigger per co-managed offering priced under its share of the premium
+ * offering, plus one per offering the quote holds to a share other than the one
+ * the version configured. Nothing is lifted: the share is a review threshold,
+ * not a floor.
+ */
+export function premiumTriggers(tiers: TierResult[], defs: ServiceTierDef[]): Trigger[] {
+  return tiers.flatMap((tier) => {
+    if (tier.premiumPct === null || tier.premiumTarget === null) return [];
+    const configured = defs.find((def) => def.key === tier.key)?.premiumPct ?? null;
+    const triggers: Trigger[] = [];
+    if (configured !== null && round2(tier.premiumPct) !== round2(configured)) {
+      triggers.push({
+        code: "PREMIUM_PCT_CHANGED",
+        tierKey: tier.key,
+        message: `${tier.label} held to ${tier.premiumPct}% of the premium offering (configured ${configured}%)`,
+      });
+    }
+    if (tier.belowPremiumPct) {
+      triggers.push({
+        code: "BELOW_PREMIUM_PCT",
+        tierKey: tier.key,
+        message: `${tier.label} at ${money(tier.standardRate)} is under ${tier.premiumPct}% of the premium offering (${money(tier.premiumTarget)})`,
+      });
+    }
+    return triggers;
+  });
 }
 
 /** One trigger per offering whose rate landed under the per-user floor. */

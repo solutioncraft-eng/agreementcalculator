@@ -29,6 +29,7 @@ const INPUTS: CalcInputs = {
   locations: 1,
   sgmPct: 50,
   perUserFloor: 10,
+  premiumPct: null,
   floorOverride: false,
   addonMultiplier: 4,
   markupMultiple: 0,
