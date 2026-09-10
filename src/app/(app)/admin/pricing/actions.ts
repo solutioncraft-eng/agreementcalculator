@@ -536,6 +536,29 @@ function hasParentCycle(links: Map<string, string | null>, key: string): boolean
   return false;
 }
 
+/**
+ * Delivery is decided at the root of the parent chain, so an offering built on
+ * a co-managed one is co-managed too.
+ */
+function deliveredCoManaged(
+  tiers: { key: string; parentKey: string | null; coManaged: boolean }[],
+  parentKey: string,
+): boolean {
+  const byKey = new Map(tiers.map((tier) => [tier.key, tier]));
+  const seen = new Set<string>();
+  let current = byKey.get(parentKey);
+  while (current && !seen.has(current.key)) {
+    seen.add(current.key);
+    const parent = current.parentKey ? byKey.get(current.parentKey) : undefined;
+    if (!parent) return current.coManaged;
+    current = parent;
+  }
+  return false;
+}
+
+const PREMIUM_NOT_CO_MANAGED =
+  "The premium offering is the one co-managed offerings are measured against, so it cannot itself be co-managed.";
+
 const PICK_PREMIUM =
   "Mark one offering as the premium agreement — until then this co-managed offering is held to the per-user floor rather than a share of premium.";
 
@@ -612,7 +635,7 @@ export async function saveServiceTier(_prev: AdminState, formData: FormData): Pr
   const data = parsed.data;
   const parentKey = data.parentKey || null;
   if (data.premium && data.coManaged) {
-    return { error: "The premium offering is the one co-managed offerings are measured against, so it cannot itself be co-managed." };
+    return { error: PREMIUM_NOT_CO_MANAGED };
   }
   // A zero component is the same as none, so the stored row reads cleanly. The
   // premium offering is what shares are measured against, so it holds none.
@@ -637,6 +660,11 @@ export async function saveServiceTier(_prev: AdminState, formData: FormData): Pr
 
   if (parentKey && !tiers.some((tier) => tier.key === parentKey)) {
     return { error: "Build the offering on one this draft defines, or leave it standalone." };
+  }
+  if (data.premium && parentKey && deliveredCoManaged(tiers, parentKey)) {
+    return {
+      error: PREMIUM_NOT_CO_MANAGED,
+    };
   }
 
   if (tierId) {

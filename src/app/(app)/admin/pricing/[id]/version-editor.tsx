@@ -930,49 +930,49 @@ function TierForm({
               priced with the add-on lever either way.
             </p>
           ) : (
-            <>
-              <label className="mt-1 flex items-start gap-2 text-[13px] text-navy">
-                <input
-                  type="checkbox"
-                  name="coManaged"
-                  checked={coManaged}
-                  onChange={(event) => {
-                    setCoManaged(event.target.checked);
-                    if (event.target.checked) setPremium(false);
-                  }}
-                  className="mt-[3px] h-4 w-4 accent-orange"
-                />
-                <span>
-                  Co-managed — delivered alongside the client&apos;s own IT staff.
-                  <span className="block text-slate">
-                    Its tools are priced with the version&apos;s co-managed lever instead of the main one, and so
-                    are the offerings that build on it.
-                  </span>
+            <label className="mt-1 flex items-start gap-2 text-[13px] text-navy">
+              <input
+                type="checkbox"
+                name="coManaged"
+                checked={coManaged}
+                onChange={(event) => {
+                  setCoManaged(event.target.checked);
+                  if (event.target.checked) setPremium(false);
+                }}
+                className="mt-[3px] h-4 w-4 accent-orange"
+              />
+              <span>
+                Co-managed — delivered alongside the client&apos;s own IT staff.
+                <span className="block text-slate">
+                  Its tools are priced with the version&apos;s co-managed lever instead of the main one, and so
+                  are the offerings that build on it.
                 </span>
-              </label>
-              <label className="mt-2 flex items-start gap-2 text-[13px] text-navy">
-                <input
-                  type="checkbox"
-                  name="premium"
-                  checked={premium}
-                  disabled={coManaged}
-                  onChange={(event) => setPremium(event.target.checked)}
-                  className="mt-[3px] h-4 w-4 accent-orange disabled:opacity-60"
-                />
-                <span>
-                  The premium agreement — every co-managed offering is priced as a share of it.
-                  <span className="block text-slate">
-                    One per version.{" "}
-                    {coManaged
-                      ? "A co-managed offering cannot be the premium one it is measured against."
-                      : premiumHolder
-                        ? `Saving this takes it from ${premiumHolder.label}.`
-                        : "Nothing carries it yet."}
-                  </span>
-                </span>
-              </label>
-            </>
+              </span>
+            </label>
           )}
+          {/* The premium agreement is often the top of a ladder, so an offering
+              that builds on another can carry it too. */}
+          <label className="mt-2 flex items-start gap-2 text-[13px] text-navy">
+            <input
+              type="checkbox"
+              name="premium"
+              checked={premium && !sharesPremium}
+              disabled={sharesPremium}
+              onChange={(event) => setPremium(event.target.checked)}
+              className="mt-[3px] h-4 w-4 accent-orange disabled:opacity-60"
+            />
+            <span>
+              The premium agreement — every co-managed offering is priced as a share of it.
+              <span className="block text-slate">
+                One per version.{" "}
+                {sharesPremium
+                  ? "A co-managed offering cannot be the premium one it is measured against."
+                  : premiumHolder
+                    ? `Saving this takes it from ${premiumHolder.label}.`
+                    : "Nothing carries it yet."}
+              </span>
+            </span>
+          </label>
           {sharesPremium ? (
             <div className="mt-3 grid gap-3 sm:grid-cols-4">
               <Field
