@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { Prisma } from "@prisma/client";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth";
 import type { TenantDb } from "@/lib/db";
@@ -18,23 +19,18 @@ import {
   markupSettingsSchema,
   parseSettings,
 } from "@/lib/pricing/models";
-import { SEED_COST_BASIS, SEED_SERVICE_TIERS, SEED_VERSION_LABEL } from "@/lib/pricing/defaults";
+import { freeLabel } from "@/lib/pricing/labels";
+import { SEED_COST_BASIS, SEED_SERVICE_TIERS } from "@/lib/pricing/defaults";
+import type { ModelSettings } from "@/lib/pricing/engine";
 
 export interface AdminState {
   error?: string;
   ok?: string;
 }
 
-/// Next label: bumps the trailing number of the newest label, e.g. 2026.3 → 2026.4.
-function nextLabel(previous?: string): string {
-  if (!previous) return SEED_VERSION_LABEL;
-  const match = /^(.*?)(\d+)$/.exec(previous);
-  if (!match) return `${previous}.1`;
-  return `${match[1]}${Number(match[2]) + 1}`;
-}
-
 /** Creates a draft, cloning the newest version's items so admins edit deltas. */
-export async function createDraft(): Promise<void> {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- useActionState signature
+export async function createDraft(_prev: AdminState, _formData: FormData): Promise<AdminState> {
   const { user, tenant, db } = await requireRole("ADMIN");
 
   const existingDraft = await db.pricingVersion.findFirst({ where: { status: "DRAFT" } });
@@ -46,77 +42,110 @@ export async function createDraft(): Promise<void> {
     include: { serviceTiers: true, cogsItems: { include: { tiers: true } }, bundles: true },
   });
 
-  const draft = await db.pricingVersion.create({
-    data: {
-      tenantId: tenant.id,
-      label: nextLabel(source?.label),
-      costBasis: source?.costBasis ?? SEED_COST_BASIS,
-      // A draft inherits the workspace's model, and its settings from the
-      // version it clones, so tuning a number never changes the model.
-      model: tenant.pricingModel,
-      settings:
-        source && source.model === tenant.pricingModel
-          ? parseSettings(source.model, source.settings)
-          : PRICING_MODELS[tenant.pricingModel].defaults,
-      createdById: user.id,
-      // The offerings are cloned with the items, so a draft opens with the
-      // ladder the published version sells and the admin edits from there.
-      serviceTiers: {
-        create: (source?.serviceTiers.length
-          ? source.serviceTiers.map((tier) => ({
-              key: tier.key,
-              label: tier.label,
-              description: tier.description,
-              parentKey: tier.parentKey,
-              sortOrder: tier.sortOrder,
-              coManaged: tier.coManaged,
-              overridePerUser: tier.overridePerUser,
-              overridePerDevice: tier.overridePerDevice,
-              overridePerLocation: tier.overridePerLocation,
-              overrideFlat: tier.overrideFlat,
-              perUserFloor: tier.perUserFloor,
-            }))
-          : SEED_SERVICE_TIERS.map((tier, index) => ({ ...tier, sortOrder: index }))
-        ).map((tier) => ({ ...tier, tenantId: tenant.id })),
-      },
-      cogsItems: source
-        ? {
-            create: source.cogsItems.map((item) => ({
-              tenantId: tenant.id,
-              key: item.key,
-              label: item.label,
-              vendor: item.vendor,
-              category: item.category,
-              unit: item.unit,
-              unitCost: item.unitCost,
-              active: item.active,
-              sortOrder: item.sortOrder,
-              // Which offerings use the item is part of the pricing, so it is
-              // cloned with it rather than re-derived.
-              tiers: {
-                create: item.tiers.map((membership) => ({
-                  tenantId: tenant.id,
-                  tierKey: membership.tierKey,
-                })),
-              },
-            })),
-          }
-        : undefined,
-      bundles: source
-        ? {
-            create: source.bundles.map((bundle) => ({
-              tenantId: tenant.id,
-              key: bundle.key,
-              label: bundle.label,
-              description: bundle.description,
-              discountPct: bundle.discountPct,
-              highlight: bundle.highlight,
-              sortOrder: bundle.sortOrder,
-            })),
-          }
-        : undefined,
+  const labels = await db.pricingVersion.findMany({ select: { label: true } });
+  const label = freeLabel(
+    source?.label,
+    labels.map((version) => version.label),
+  );
+
+  // A draft inherits the workspace's model, and its settings from the version it
+  // clones, so tuning a number never changes the model. Settings stored under an
+  // older shape of the model fall back to its defaults rather than failing.
+  const defaults = PRICING_MODELS[tenant.pricingModel].defaults;
+  let settings: ModelSettings = defaults;
+  if (source && source.model === tenant.pricingModel) {
+    try {
+      settings = parseSettings(source.model, source.settings);
+    } catch (error) {
+      console.error("createDraft: unreadable settings on source version", {
+        tenantId: tenant.id,
+        sourceId: source.id,
+        error,
+      });
+    }
+  }
+
+  const data = {
+    tenantId: tenant.id,
+    label,
+    costBasis: source?.costBasis ?? SEED_COST_BASIS,
+    model: tenant.pricingModel,
+    settings: { ...settings },
+    createdById: user.id,
+    // The offerings are cloned with the items, so a draft opens with the
+    // ladder the published version sells and the admin edits from there.
+    serviceTiers: {
+      create: (source?.serviceTiers.length
+        ? source.serviceTiers.map((tier) => ({
+            key: tier.key,
+            label: tier.label,
+            description: tier.description,
+            parentKey: tier.parentKey,
+            sortOrder: tier.sortOrder,
+            coManaged: tier.coManaged,
+            overridePerUser: tier.overridePerUser,
+            overridePerDevice: tier.overridePerDevice,
+            overridePerLocation: tier.overridePerLocation,
+            overrideFlat: tier.overrideFlat,
+            perUserFloor: tier.perUserFloor,
+          }))
+        : SEED_SERVICE_TIERS.map((tier, index) => ({ ...tier, sortOrder: index }))
+      ).map((tier) => ({ ...tier, tenantId: tenant.id })),
     },
-  });
+    cogsItems: source
+      ? {
+          create: source.cogsItems.map((item) => ({
+            tenantId: tenant.id,
+            key: item.key,
+            label: item.label,
+            vendor: item.vendor,
+            category: item.category,
+            unit: item.unit,
+            unitCost: item.unitCost,
+            active: item.active,
+            sortOrder: item.sortOrder,
+            // Which offerings use the item is part of the pricing, so it is
+            // cloned with it rather than re-derived.
+            tiers: {
+              create: item.tiers.map((membership) => ({
+                tenantId: tenant.id,
+                tierKey: membership.tierKey,
+              })),
+            },
+          })),
+        }
+      : undefined,
+    bundles: source
+      ? {
+          create: source.bundles.map((bundle) => ({
+            tenantId: tenant.id,
+            key: bundle.key,
+            label: bundle.label,
+            description: bundle.description,
+            discountPct: bundle.discountPct,
+            highlight: bundle.highlight,
+            sortOrder: bundle.sortOrder,
+          })),
+        }
+      : undefined,
+  };
+
+  // Only the write is guarded: redirect() signals by throwing, so it stays out.
+  let draft;
+  try {
+    draft = await db.pricingVersion.create({ data });
+  } catch (error) {
+    console.error("createDraft: pricing draft create failed", {
+      tenantId: tenant.id,
+      label,
+      sourceId: source?.id ?? null,
+      error,
+    });
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return { error: `Version label ${label} is already in use — reload the page and try again.` };
+    }
+    return { error: "Could not create a new draft. Try again, and contact support if it keeps failing." };
+  }
 
   await audit({
     action: "VERSION_DRAFT_CREATED",
