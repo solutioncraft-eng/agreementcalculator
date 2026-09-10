@@ -510,7 +510,7 @@ export function CogsDocument({ result, tierKey, clientName, notes, stamp, worksp
               <Text>{money(t.headlineRate - t.discountedRate)}</Text>
             </View>
           ) : null}
-          {t.premiumTarget !== null ? (
+          {t.premiumTarget !== null && t.overridden ? (
             <View style={styles.row}>
               <Text style={styles.rowMuted}>
                 {t.premiumPct}% of the premium offering
