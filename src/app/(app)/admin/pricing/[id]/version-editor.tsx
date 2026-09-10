@@ -9,6 +9,7 @@ import {
   deleteBundle,
   deleteCogsItem,
   deleteServiceTier,
+  discardDraft,
   moveServiceTier,
   publishVersion,
   saveBundle,
@@ -216,6 +217,7 @@ export function VersionEditor({
   const [bundleState, bundleAction, savingBundle] = useActionState<AdminState, FormData>(saveBundle, {});
   const [bundleDeleteState, bundleDeleteAction] = useActionState<AdminState, FormData>(deleteBundle, {});
   const [publishState, publishAction, publishing] = useActionState<AdminState, FormData>(publishVersion, {});
+  const [discardState, discardAction, discarding] = useActionState<AdminState, FormData>(discardDraft, {});
   const [tierState, tierAction, savingTier] = useActionState<AdminState, FormData>(saveServiceTier, {});
   const [tierMoveState, tierMoveAction] = useActionState<AdminState, FormData>(moveServiceTier, {});
   const [tierDeleteState, tierDeleteAction] = useActionState<AdminState, FormData>(deleteServiceTier, {});
@@ -258,15 +260,33 @@ export function VersionEditor({
           </p>
         </div>
         {editable ? (
-          <form action={publishAction}>
-            <input type="hidden" name="versionId" value={version.id} />
-            <button type="submit" className="btn-primary" disabled={publishing}>
-              {publishing ? "Publishing…" : `Publish ${version.label}`}
-            </button>
-          </form>
+          <div className="flex flex-col items-end gap-2">
+            <form action={publishAction}>
+              <input type="hidden" name="versionId" value={version.id} />
+              <button type="submit" className="btn-primary" disabled={publishing}>
+                {publishing ? "Publishing…" : `Publish ${version.label}`}
+              </button>
+            </form>
+            <details>
+              <summary className="cursor-pointer text-[13px] text-slate">Discard this draft</summary>
+              <div className="mt-2 max-w-[320px] text-right">
+                <p className="text-[13px] text-slate">
+                  Everything configured on {version.label} goes with it — the offerings, the costs and the
+                  bundles. The published version keeps selling, and a new draft starts from it again.
+                </p>
+                <form action={discardAction} className="mt-2">
+                  <input type="hidden" name="versionId" value={version.id} />
+                  <button type="submit" className="btn-ghost btn-sm text-orange" disabled={discarding}>
+                    {discarding ? "Discarding…" : `Discard ${version.label}`}
+                  </button>
+                </form>
+              </div>
+            </details>
+          </div>
         ) : null}
       </header>
       <Feedback state={publishState} />
+      <Feedback state={discardState} />
 
       <section className="card">
         <h2 className="text-[18px]">Pricing model — {version.modelLabel}</h2>

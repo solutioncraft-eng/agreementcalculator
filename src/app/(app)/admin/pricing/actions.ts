@@ -162,6 +162,59 @@ export async function createDraft(_prev: AdminState, _formData: FormData): Promi
   redirect(`/admin/pricing/${draft.id}`);
 }
 
+/**
+ * Throws away a draft and everything configured on it. Only a draft can go:
+ * a published or archived version is the record a quote was priced on.
+ */
+export async function discardDraft(_prev: AdminState, formData: FormData): Promise<AdminState> {
+  const { user, tenant, db } = await requireRole("ADMIN");
+  const versionId = String(formData.get("versionId") ?? "");
+
+  const version = await db.pricingVersion.findUnique({
+    where: { id: versionId },
+    include: { _count: { select: { serviceTiers: true, cogsItems: true, quoteRequests: true, exports: true } } },
+  });
+  if (!version) return { error: "That pricing version no longer exists." };
+  if (version.status !== "DRAFT") {
+    return { error: `${version.label} is ${version.status.toLowerCase()} — only a draft can be discarded.` };
+  }
+  // A quote or export pins the version it was priced on, so a draft that
+  // somehow carries one stays for the record rather than being deleted.
+  if (version._count.quoteRequests > 0 || version._count.exports > 0) {
+    return { error: `${version.label} has quotes priced on it and cannot be discarded.` };
+  }
+
+  // Offerings, items, memberships and bundles cascade with the version.
+  try {
+    await db.pricingVersion.delete({ where: { id: versionId } });
+  } catch (error) {
+    console.error("discardDraft: pricing draft delete failed", {
+      tenantId: tenant.id,
+      versionId,
+      error,
+    });
+    return { error: "Could not discard the draft. Try again, and contact support if it keeps failing." };
+  }
+
+  await audit({
+    action: "VERSION_DELETED",
+    entity: "PricingVersion",
+    entityId: versionId,
+    summary: `Pricing draft ${version.label} discarded`,
+    before: {
+      label: version.label,
+      costBasis: version.costBasis,
+      offerings: version._count.serviceTiers,
+      cogsItems: version._count.cogsItems,
+    },
+    tenantId: tenant.id,
+    actor: user,
+  });
+
+  revalidatePath("/admin/pricing");
+  redirect("/admin/pricing");
+}
+
 export async function updateVersion(_prev: AdminState, formData: FormData): Promise<AdminState> {
   const { user, tenant, db } = await requireRole("ADMIN");
   const versionId = String(formData.get("versionId") ?? "");
