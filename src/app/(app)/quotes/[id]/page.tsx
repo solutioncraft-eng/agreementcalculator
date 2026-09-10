@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { canReview, requireTenant } from "@/lib/auth";
+import { requireTenant } from "@/lib/auth";
 import { QuoteDetail } from "@/components/quote-detail";
 import { QuoteActions } from "./quote-actions";
 
@@ -18,7 +18,6 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
     },
   });
   if (!quote) notFound();
-  if (quote.submittedById !== user.id && !canReview(role)) notFound();
 
   const exports = await db.exportRecord.findMany({
     where: { quoteId: quote.id },
@@ -29,7 +28,7 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
   return (
     <div className="space-y-6">
       <Link href="/quotes" className="text-[13px] font-medium text-slate hover:text-orange">
-        ← All quotes
+        ← Quotes
       </Link>
       <QuoteDetail quote={quote} db={db} />
       <QuoteActions
@@ -37,6 +36,7 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
         status={quote.status}
         tierKey={quote.requestedTierKey}
         clientName={quote.clientName}
+        canExport={quote.submittedById === user.id || role !== "AM"}
         canWithdraw={quote.submittedById === user.id || role === "ADMIN"}
         exports={exports.map((record) => ({
           exportId: record.exportId,

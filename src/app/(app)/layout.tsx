@@ -40,7 +40,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <nav className="nav-row order-last flex w-full items-center gap-1 lg:order-none lg:w-auto lg:flex-1 lg:overflow-visible">
             <NavLink href="/calculator">Calculator</NavLink>
             <NavLink href="/quotes" badge={myOpen || undefined}>
-              My quotes
+              Quotes
             </NavLink>
             {canReview(role) ? (
               <NavLink href="/reviews" badge={pendingReviews || undefined}>

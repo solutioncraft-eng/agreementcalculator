@@ -15,6 +15,8 @@ import {
 } from "@/lib/pdf/documents";
 import { customerLogo, newExportId, renderPdf, workspaceLogo } from "@/lib/pdf/render";
 import { exportPayloadSchema } from "@/lib/schemas";
+import { newQuoteRef, purgeDate } from "@/lib/quote-records";
+import { EXPORTABLE, tierRatesFrom } from "@/lib/quotes";
 import { APP_VERSION_STAMP } from "@/lib/version";
 import { workspaceAccess } from "@/lib/billing";
 
@@ -73,7 +75,7 @@ export async function POST(request: Request) {
     if (quote.submittedById !== user.id && role === "AM") {
       return NextResponse.json({ error: "Not your quote" }, { status: 403 });
     }
-    if (quote.status !== "APPROVED") {
+    if (!EXPORTABLE.includes(quote.status)) {
       await audit({
         action: "PDF_EXPORT_BLOCKED",
         entity: "QuoteRequest",
@@ -207,6 +209,47 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: `The PDF could not be rendered: ${detail}` }, { status: 500 });
   }
 
+  // A customer-facing export is a completed quote. Approved quotes move to
+  // COMPLETED on their first export; standard quotes (never submitted for
+  // review) are saved now so the Quotes tab keeps a record of what went out.
+  let savedQuoteId = quoteId ?? null;
+  if (payload.docType === "QUOTE") {
+    if (quoteId) {
+      await db.quoteRequest.updateMany({
+        where: { id: quoteId, status: "APPROVED" },
+        data: { status: "COMPLETED" },
+      });
+    } else {
+      const saved = await db.quoteRequest.create({
+        data: {
+          tenantId: tenant.id,
+          ref: newQuoteRef(),
+          status: "COMPLETED",
+          clientName,
+          notes,
+          users: inputs.users,
+          devices: inputs.devices,
+          locations: inputs.locations,
+          sgmPct: inputs.sgmPct,
+          perUserFloor: inputs.perUserFloor,
+          floorOverride: inputs.floorOverride,
+          addonMultiplier: inputs.addonMultiplier,
+          markupMultiple: inputs.markupMultiple,
+          bundleKey: inputs.bundleKey,
+          requestedTierKey: payload.tierKey,
+          tierRates: tierRatesFrom(result.tiers),
+          triggers: [],
+          pricingVersionId: config.versionId,
+          submittedById: user.id,
+          decidedAt: stamp.exportedAt,
+          purgeAfter: purgeDate(tenant.retentionMonths),
+        },
+        select: { id: true },
+      });
+      savedQuoteId = saved.id;
+    }
+  }
+
   await db.exportRecord.create({
     data: {
       tenantId: tenant.id,
@@ -215,7 +258,7 @@ export async function POST(request: Request) {
       exportedById: user.id,
       pricingVersionId: config.versionId,
       appVersion: APP_VERSION_STAMP,
-      quoteId: quoteId ?? null,
+      quoteId: savedQuoteId,
       clientName,
       approvalState: approvalLabel(stamp),
       inputs: { ...inputs, tierKey: payload.tierKey },

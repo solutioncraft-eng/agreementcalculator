@@ -1,6 +1,5 @@
 "use server";
 
-import { randomBytes } from "node:crypto";
 import { redirect } from "next/navigation";
 import { audit } from "@/lib/audit";
 import { requireTenant } from "@/lib/auth";
@@ -8,23 +7,12 @@ import { appUrl, sendMail } from "@/lib/email";
 import { getActiveConfig } from "@/lib/pricing/config";
 import { forTier } from "@/lib/pricing/engine";
 import { calculate } from "@/lib/pricing/models";
+import { newQuoteRef, purgeDate } from "@/lib/quote-records";
 import { tierRatesFrom } from "@/lib/quotes";
 import { submitQuoteSchema } from "@/lib/schemas";
 
 export interface SubmitState {
   error?: string;
-}
-
-function newRef(): string {
-  const now = new Date();
-  const month = `${now.getUTCFullYear()}${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
-  return `QR-${month}-${randomBytes(2).toString("hex").toUpperCase()}`;
-}
-
-function purgeDate(retentionMonths: number): Date {
-  const d = new Date();
-  d.setMonth(d.getMonth() + retentionMonths);
-  return d;
 }
 
 export async function submitForReview(_prev: SubmitState, formData: FormData): Promise<SubmitState> {
@@ -67,7 +55,7 @@ export async function submitForReview(_prev: SubmitState, formData: FormData): P
   const quote = await db.quoteRequest.create({
     data: {
       tenantId: tenant.id,
-      ref: newRef(),
+      ref: newQuoteRef(),
       clientName,
       notes: notes || null,
       users: inputs.users,

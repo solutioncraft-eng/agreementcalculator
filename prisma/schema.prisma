@@ -70,6 +70,9 @@ enum QuoteStatus {
   CHANGES_REQUESTED
   DENIED
   WITHDRAWN
+  /// Exported to the customer. Standard quotes are created in this state;
+  /// approved quotes move here on their first export.
+  COMPLETED
 }
 
 enum ReviewAction {
