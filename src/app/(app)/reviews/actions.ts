@@ -111,7 +111,9 @@ export async function withdraw(_prev: DecisionState, formData: FormData): Promis
   if (quote.submittedById !== user.id && role !== "ADMIN") {
     return { error: "Only the account manager who submitted it can withdraw it." };
   }
-  if (quote.status === "APPROVED") return { error: "Approved quotes cannot be withdrawn." };
+  if (quote.status === "APPROVED" || quote.status === "COMPLETED") {
+    return { error: "Approved quotes cannot be withdrawn." };
+  }
 
   await db.quoteRequest.update({
     where: { id: quote.id },

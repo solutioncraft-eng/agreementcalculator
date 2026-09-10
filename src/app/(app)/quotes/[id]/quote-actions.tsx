@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import type { QuoteStatus } from "@prisma/client";
 import { downloadExport } from "@/lib/export-client";
+import { EXPORTABLE } from "@/lib/quotes";
 import { LocalTime } from "@/components/local-time";
 import { withdraw, type DecisionState } from "../../reviews/actions";
 
@@ -19,6 +20,7 @@ export function QuoteActions({
   status,
   tierKey,
   clientName,
+  canExport,
   canWithdraw,
   exports,
 }: {
@@ -26,13 +28,14 @@ export function QuoteActions({
   status: QuoteStatus;
   tierKey: string;
   clientName: string;
+  canExport: boolean;
   canWithdraw: boolean;
   exports: ExportRow[];
 }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [state, withdrawAction, withdrawing] = useActionState<DecisionState, FormData>(withdraw, {});
-  const approved = status === "APPROVED";
+  const approved = EXPORTABLE.includes(status) && canExport;
 
   async function runExport(docType: "QUOTE" | "COGS") {
     setError(null);
@@ -49,6 +52,8 @@ export function QuoteActions({
         <p className="mt-2 text-[14px] text-slate">
           Approved — exports are unlocked and stamped with this quote reference.
         </p>
+      ) : !canExport ? (
+        <p className="mt-2 text-[14px] text-slate">Only the submitter or a leader can export this quote.</p>
       ) : (
         <p className="mt-2 text-[14px] text-slate">
           Export stays locked until a leader approves this quote.

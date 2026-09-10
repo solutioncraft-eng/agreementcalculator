@@ -15,7 +15,9 @@ export default async function ReviewsPage() {
       include: { submittedBy: { select: { name: true } } },
     }),
     db.quoteRequest.findMany({
-      where: { status: { not: "PENDING" } },
+      // Standard exports are saved as COMPLETED quotes with no triggers; they
+      // never passed through review, so they do not belong in this history.
+      where: { status: { not: "PENDING" }, NOT: { triggers: { isEmpty: true } } },
       orderBy: { updatedAt: "desc" },
       take: 50,
       include: { submittedBy: { select: { name: true } } },

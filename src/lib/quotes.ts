@@ -8,6 +8,7 @@ export const STATUS_LABEL: Record<QuoteStatus, string> = {
   CHANGES_REQUESTED: "Changes requested",
   DENIED: "Denied",
   WITHDRAWN: "Withdrawn",
+  COMPLETED: "Completed",
 };
 
 /**
@@ -21,6 +22,7 @@ export const STATUS_CLASS: Record<QuoteStatus, string> = {
   CHANGES_REQUESTED: "bg-status-changes text-status-changes-fg",
   DENIED: "bg-ink text-white",
   WITHDRAWN: "bg-status-draft text-status-draft-fg",
+  COMPLETED: "bg-navy text-white",
 };
 
 export const TRIGGER_LABEL: Record<string, string> = {
@@ -96,3 +98,6 @@ export function tierRatesFrom(tiers: TierResult[]): StoredTierRate[] {
 export function formatUtc(date: Date): string {
   return `${date.toISOString().slice(0, 16).replace("T", " ")} UTC`;
 }
+
+/** Statuses under which a quote's customer-facing export is unlocked. */
+export const EXPORTABLE: readonly QuoteStatus[] = ["APPROVED", "COMPLETED"];
