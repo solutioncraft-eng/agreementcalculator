@@ -978,7 +978,7 @@ function TierForm({
               <Field
                 name="premiumPct"
                 label="Share of premium (%)"
-                hint="What this co-managed offering is expected to sell for as a share of the premium agreement's rate before any bundle discount — 65% for a helpdesk level agreement, 53% for a higher-tier one, which is cheaper because it carries no frontline volume of labor. A quote that lands under the share is flagged for approval rather than lifted. Leave blank to hold the offering to the per-user floor instead."
+                hint="What this co-managed offering sells for as a share of the premium agreement's rate before any bundle discount — 65% for a helpdesk level agreement, 53% for a higher-tier one, which is cheaper because it carries no frontline volume of labor. The share sets the rate, and the bundle discount comes off it. An account manager changing the share, or a share that does not cover cost, is flagged for approval. Leave blank to price the offering from its own costs and hold it to the per-user floor instead."
                 type="number"
                 step="1"
                 defaultValue={tier?.premiumPct ?? ""}

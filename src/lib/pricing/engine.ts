@@ -200,6 +200,7 @@ export type TriggerCode =
   | "DISCOUNT_OVER_MAX"
   | "OVERRIDE_BELOW_COST"
   | "BELOW_PREMIUM_PCT"
+  | "PREMIUM_SHARE_BELOW_COST"
   | "PREMIUM_PCT_CHANGED";
 
 export interface Trigger {
@@ -250,9 +251,12 @@ export interface TierResult {
    * offering, and a co-managed one in a version with no premium chosen.
    */
   premiumPct: number | null;
-  /** The rate `premiumPct` of the premium offering comes to. Null with no share. */
+  /**
+   * The rate `premiumPct` of the premium offering comes to, which is what the
+   * offering sells for. Null with no share.
+   */
   premiumTarget: number | null;
-  /** The standard rate sits under `premiumTarget`. */
+  /** The standard rate sits under `premiumTarget` — only a rate override can. */
   belowPremiumPct: boolean;
   /** Fewest users this offering sells to. Null sells at any size. */
   minUsers: number | null;
@@ -539,15 +543,21 @@ export function priceTiers(
     : null;
 
   const tiers = priced.map((entry) => {
-    const { def, index, chain, lines, coManaged, override, baseTool, addonTool, costFloor, standardRate, bundle } =
-      entry;
+    const { def, index, chain, lines, coManaged, override, baseTool, addonTool, costFloor } = entry;
 
-    // A co-managed offering is measured against the premium offering rather than
-    // the per-user floor. With no premium chosen — every version published
-    // before premium offerings existed — the floor still holds it.
+    // A co-managed offering sells for its share of the premium offering rather
+    // than for what its own costs come to, and the per-user floor no longer
+    // holds it. With no premium chosen — every version published before premium
+    // offerings existed — it is priced from cost and held to the floor as before.
     const share = coManaged && def.premium !== true ? premiumShare(def, inputs) : null;
     const measuredOnPremium = share !== null && premiumBasis !== null;
     const premiumTarget = measuredOnPremium ? round2((premiumBasis * share) / 100) : null;
+
+    // A rate typed straight onto the offering still wins, so an admin can price
+    // one off the share deliberately.
+    const onPremium = premiumTarget !== null && override === null;
+    const standardRate = onPremium ? premiumTarget : entry.standardRate;
+    const bundle = onPremium ? applyBundle(standardRate, costFloor, pricing.bundlePct) : entry.bundle;
 
     const perUserFloor = measuredOnPremium ? 0 : tierFloor(def, inputs);
     const floor = applyFloor(bundle.final, inputs, perUserFloor);
@@ -613,6 +623,9 @@ export function priceTiers(
 /** Where an offering's standard rate came from, for the rate breakdown line. */
 export function standardRateLabel(tier: TierResult, result: CalcResult): string {
   if (tier.overridden) return "Flat rate set by your admin";
+  if (tier.premiumTarget !== null) {
+    return `Standard rate at ${tier.premiumPct}% of the premium offering`;
+  }
   if (result.model === "COST_PLUS") {
     return `Standard rate at ${result.split.sgmPct}% SGM${tier.coManaged ? ", co-managed labor" : ""}`;
   }
@@ -644,10 +657,10 @@ export function discountCappedTriggers(tiers: TierResult[], floorName: string): 
 }
 
 /**
- * One trigger per co-managed offering priced under its share of the premium
- * offering, plus one per offering the quote holds to a share other than the one
- * the version configured. Nothing is lifted: the share is a review threshold,
- * not a floor.
+ * One trigger per offering the quote holds to a share other than the one the
+ * version configured, one per offering whose rate override lands under its
+ * share, and one per offering whose share does not cover what it costs to
+ * deliver.
  */
 export function premiumTriggers(tiers: TierResult[], defs: ServiceTierDef[]): Trigger[] {
   return tiers.flatMap((tier) => {
@@ -666,6 +679,13 @@ export function premiumTriggers(tiers: TierResult[], defs: ServiceTierDef[]): Tr
         code: "BELOW_PREMIUM_PCT",
         tierKey: tier.key,
         message: `${tier.label} at ${money(tier.standardRate)} is under ${tier.premiumPct}% of the premium offering (${money(tier.premiumTarget)})`,
+      });
+    }
+    if (round2(tier.premiumTarget) < round2(tier.costFloor)) {
+      triggers.push({
+        code: "PREMIUM_SHARE_BELOW_COST",
+        tierKey: tier.key,
+        message: `${tier.label} at ${tier.premiumPct}% of the premium offering (${money(tier.premiumTarget)}) is under its cost of ${money(tier.costFloor)}`,
       });
     }
     return triggers;

@@ -1,6 +1,6 @@
 /**
- * A co-managed offering is priced as a share of the premium agreement rather
- * than against the per-user floor, and only sells to clients at or above the
+ * A co-managed offering sells for a share of the premium agreement rather than
+ * for what its own costs come to, and only sells to clients at or above the
  * seat count it was configured for.
  */
 import assert from "node:assert/strict";
@@ -94,52 +94,73 @@ const helpdesk: ServiceTierDef = {
   premiumPct: 65,
 };
 
-test("cost-plus measures a co-managed offering against the premium rate before any bundle discount", () => {
+test("cost-plus sells a co-managed offering for its share of the premium rate, discounted after", () => {
   const result = calculate(costPlus([premium, helpdesk], 50), { ...INPUTS, bundleKey: "loyalty" });
   const [top, co] = result.tiers;
   assert.equal(top.standardRate, 80);
   assert.equal(co.premiumPct, 65);
   // 65% of the $80 pre-discount premium rate, not of the $40 discounted one.
   assert.equal(co.premiumTarget, 52);
+  assert.equal(co.standardRate, 52);
+  // The bundle discount comes off the share, and its own $40 cost-plus rate
+  // never features.
+  assert.equal(co.headlineRate, 26);
 });
 
-test("markup measures the same way on its own multiples", () => {
+test("markup prices the same way on its own multiples", () => {
   const [top, co] = calculate(markup([premium, helpdesk]), INPUTS).tiers;
   assert.equal(top.standardRate, 40);
   assert.equal(co.premiumTarget, 26);
+  assert.equal(co.standardRate, 26);
+  assert.equal(co.headlineRate, 26);
 });
 
-test("a co-managed rate under its share is flagged, not lifted", () => {
+test("a co-managed offering priced on its share needs no approval", () => {
   const result = calculate(costPlus([premium, helpdesk]), INPUTS);
   const co = result.tiers[1];
-  assert.equal(co.standardRate, 40);
-  assert.equal(co.headlineRate, 40);
-  assert.equal(co.belowPremiumPct, true);
-  const trigger = result.triggers.find((t) => t.code === "BELOW_PREMIUM_PCT");
+  assert.equal(co.standardRate, 52);
+  assert.equal(co.belowPremiumPct, false);
+  assert.equal(result.needsApproval, false);
+});
+
+test("two co-managed offerings on different shares sell for different rates", () => {
+  const higherTier: ServiceTierDef = { ...helpdesk, key: "higher", label: "Higher", premiumPct: 53 };
+  const [, hd, high] = calculate(costPlus([premium, helpdesk, higherTier]), INPUTS).tiers;
+  assert.equal(hd.headlineRate, 52);
+  assert.equal(high.headlineRate, 42.4);
+});
+
+test("a share that does not cover cost is lifted to cost and flagged", () => {
+  const thin: ServiceTierDef = { ...helpdesk, premiumPct: 10 };
+  const result = calculate(costPlus([premium, thin]), INPUTS);
+  const co = result.tiers[1];
+  assert.equal(co.premiumTarget, 8);
+  assert.equal(co.costFloor, 20);
+  assert.equal(co.headlineRate, 20);
+  const trigger = result.triggers.find((t) => t.code === "PREMIUM_SHARE_BELOW_COST");
   assert.equal(trigger?.tierKey, "helpdesk");
   assert.equal(result.needsApproval, true);
 });
 
-test("a co-managed rate at or above its share raises nothing", () => {
-  const higher: ServiceTierDef = { ...helpdesk, premiumPct: 50 };
-  const result = calculate(costPlus([premium, higher]), INPUTS);
-  assert.equal(result.tiers[1].premiumTarget, 40);
-  assert.equal(result.tiers[1].belowPremiumPct, false);
-  assert.equal(result.needsApproval, false);
-});
-
-test("the higher-tier share sells for less than the helpdesk one", () => {
-  const higherTier: ServiceTierDef = { ...helpdesk, key: "higher", premiumPct: 53 };
-  const [, hd] = calculate(costPlus([premium, helpdesk]), INPUTS).tiers;
-  const [, high] = calculate(costPlus([premium, higherTier]), INPUTS).tiers;
-  assert.ok((high.premiumTarget ?? 0) < (hd.premiumTarget ?? 0));
+test("a flat rate pinned on the offering wins over the share, and under it is flagged", () => {
+  const pinned: ServiceTierDef = {
+    ...helpdesk,
+    rateOverride: { perUser: 3, perDevice: 0, perLocation: 0, flat: 0 },
+  };
+  const result = calculate(costPlus([premium, pinned]), INPUTS);
+  const co = result.tiers[1];
+  assert.equal(co.standardRate, 30);
+  assert.equal(co.premiumTarget, 52);
+  assert.equal(co.belowPremiumPct, true);
+  const trigger = result.triggers.find((t) => t.code === "BELOW_PREMIUM_PCT");
+  assert.equal(trigger?.tierKey, "helpdesk");
 });
 
 test("the premium share replaces the per-user floor for a co-managed offering", () => {
   const [top, co] = calculate(costPlus([premium, helpdesk]), { ...INPUTS, perUserFloor: 9 }).tiers;
   assert.equal(co.perUserFloor, 0);
   assert.equal(co.belowFloor, false);
-  assert.equal(co.headlineRate, 40);
+  assert.equal(co.headlineRate, 58.5);
   // The floor still holds the fully managed premium offering, and the share is
   // a share of the rate it actually sells for.
   assert.equal(top.belowFloor, true);
@@ -152,6 +173,7 @@ test("a share the account manager set overrides the configured one and is flagge
   const co = result.tiers[1];
   assert.equal(co.premiumPct, 40);
   assert.equal(co.premiumTarget, 32);
+  assert.equal(co.standardRate, 32);
   assert.equal(co.belowPremiumPct, false);
   const changed = result.triggers.find((t) => t.code === "PREMIUM_PCT_CHANGED");
   assert.equal(changed?.tierKey, "helpdesk");

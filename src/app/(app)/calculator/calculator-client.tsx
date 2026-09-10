@@ -469,7 +469,7 @@ export function CalculatorClient({
                       value={money(selected.headlineRate - selected.discountedRate)}
                     />
                   ) : null}
-                  {selected.premiumTarget !== null ? (
+                  {selected.premiumTarget !== null && selected.overridden ? (
                     <Line
                       muted
                       label={`${selected.premiumPct}% of the premium offering${

@@ -34,6 +34,7 @@ export const TRIGGER_LABEL: Record<string, string> = {
   PINNACLE_BELOW_FLOOR: "Upper tier below floor",
   FLOOR_OVERRIDE: "Floor overridden",
   BELOW_PREMIUM_PCT: "Under its share of the premium offering",
+  PREMIUM_SHARE_BELOW_COST: "Share of premium under cost",
   PREMIUM_PCT_CHANGED: "Share of premium changed",
   DISCOUNT_CAPPED_AT_COST: "Bundle discount capped at cost",
   ADDON_MULTIPLIER_NON_DEFAULT: "Add-on multiplier off default",
