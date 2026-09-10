@@ -8,7 +8,7 @@ export const STATUS_LABEL: Record<QuoteStatus, string> = {
   CHANGES_REQUESTED: "Changes requested",
   DENIED: "Denied",
   WITHDRAWN: "Withdrawn",
-  COMPLETED: "Completed",
+  COMPLETED: "Delivered",
 };
 
 /**
