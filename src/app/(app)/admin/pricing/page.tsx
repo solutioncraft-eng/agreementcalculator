@@ -3,7 +3,7 @@ import clsx from "clsx";
 import { requireRole } from "@/lib/auth";
 import { PRICING_MODELS } from "@/lib/pricing/models";
 import { formatUtc } from "@/lib/quotes";
-import { createDraft } from "./actions";
+import { CreateDraftButton } from "./create-draft-button";
 
 export const dynamic = "force-dynamic";
 
@@ -38,11 +38,7 @@ export default async function PricingVersionsPage() {
             <span className="font-semibold text-navy">{PRICING_MODELS[tenant.pricingModel].label}</span>.
           </p>
         </div>
-        <form action={createDraft}>
-          <button type="submit" className="btn-primary">
-            {hasDraft ? "Open the working draft" : "Create a new draft"}
-          </button>
-        </form>
+        <CreateDraftButton hasDraft={hasDraft} />
       </header>
 
       <div className="card overflow-x-auto p-0">
