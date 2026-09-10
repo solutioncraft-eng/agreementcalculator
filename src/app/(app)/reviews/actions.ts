@@ -1,11 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { audit, type AuditAction } from "@/lib/audit";
-import { canReview, requireTenant } from "@/lib/auth";
+import { canAdminister, canReview, requireTenant } from "@/lib/auth";
 import { appUrl, sendMail } from "@/lib/email";
 import { reviewDecisionSchema } from "@/lib/schemas";
-import { STATUS_LABEL } from "@/lib/quotes";
+import { STATUS_LABEL, formatUtc, storedTiers } from "@/lib/quotes";
 import type { QuoteStatus, ReviewAction } from "@prisma/client";
 
 export interface DecisionState {
@@ -139,4 +140,85 @@ export async function withdraw(_prev: DecisionState, formData: FormData): Promis
   revalidatePath(`/quotes/${quote.id}`);
   revalidatePath("/reviews");
   return { ok: "Withdrawn." };
+}
+
+/**
+ * Admin-only hard delete. The quote's full commercial detail is written to the
+ * audit log first so the record of what was quoted survives; export records
+ * are kept (their quoteId is nulled by the relation) because the PDFs they
+ * describe may already be with the customer.
+ */
+export async function deleteQuote(_prev: DecisionState, formData: FormData): Promise<DecisionState> {
+  const { user, role, tenant, db } = await requireTenant();
+  if (!canAdminister(role)) return { error: "Only an administrator can delete a quote." };
+  const quoteId = String(formData.get("quoteId") ?? "");
+  const quote = await db.quoteRequest.findUnique({
+    where: { id: quoteId },
+    include: {
+      submittedBy: { select: { name: true, email: true } },
+      pricingVersion: { select: { label: true, costBasis: true } },
+      reviews: { orderBy: { createdAt: "asc" }, include: { actor: { select: { name: true } } } },
+      exports: { select: { exportId: true, docType: true, createdAt: true } },
+    },
+  });
+  if (!quote) return { error: "That quote no longer exists." };
+
+  const tiers = storedTiers(quote);
+  const requested = tiers.find((tier) => tier.key === quote.requestedTierKey);
+  const detail = {
+    ref: quote.ref,
+    status: quote.status,
+    clientName: quote.clientName,
+    notes: quote.notes,
+    submittedBy: `${quote.submittedBy.name} <${quote.submittedBy.email}>`,
+    createdAt: quote.createdAt.toISOString(),
+    pricingVersion: `${quote.pricingVersion.label} (${quote.pricingVersion.costBasis})`,
+    inputs: {
+      users: quote.users,
+      devices: quote.devices,
+      locations: quote.locations,
+      sgmPct: quote.sgmPct.toNumber(),
+      perUserFloor: quote.perUserFloor.toNumber(),
+      floorOverride: quote.floorOverride,
+      addonMultiplier: quote.addonMultiplier.toNumber(),
+      markupMultiple: quote.markupMultiple.toNumber(),
+      bundleKey: quote.bundleKey,
+    },
+    requestedTier: requested ? { ...requested } : { key: quote.requestedTierKey },
+    tierRates: tiers.map((tier) => ({ ...tier })),
+    triggers: quote.triggers,
+    reviews: quote.reviews.map((review) => ({
+      action: review.action,
+      by: review.actor.name,
+      at: review.createdAt.toISOString(),
+      comment: review.comment,
+    })),
+    exports: quote.exports.map((record) => ({
+      exportId: record.exportId,
+      docType: record.docType,
+      at: record.createdAt.toISOString(),
+    })),
+  };
+  const amount = requested
+    ? `${requested.label} at $${requested.rate.toFixed(2)}/mo ($${requested.perUser.toFixed(2)}/user)`
+    : quote.requestedTierKey;
+
+  await db.quoteRequest.delete({ where: { id: quote.id } });
+
+  await audit({
+    action: "QUOTE_DELETED",
+    entity: "QuoteRequest",
+    entityId: quote.id,
+    summary:
+      `${quote.ref} (${quote.clientName}, ${STATUS_LABEL[quote.status].toLowerCase()}) deleted by ${user.name} — ` +
+      `${quote.users} users, ${quote.devices} devices, ${quote.locations} locations; ${amount}; ` +
+      `submitted ${formatUtc(quote.createdAt)} by ${quote.submittedBy.name}; ${quote.exports.length} export(s)`,
+    before: detail,
+    tenantId: tenant.id,
+    actor: user,
+  });
+
+  revalidatePath("/quotes");
+  revalidatePath("/reviews");
+  redirect("/quotes");
 }

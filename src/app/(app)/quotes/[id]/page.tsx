@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireTenant } from "@/lib/auth";
+import { canAdminister, requireTenant } from "@/lib/auth";
 import { QuoteDetail } from "@/components/quote-detail";
 import { QuoteActions } from "./quote-actions";
 
@@ -38,6 +38,7 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
         clientName={quote.clientName}
         canExport={quote.submittedById === user.id || role !== "AM"}
         canWithdraw={quote.submittedById === user.id || role === "ADMIN"}
+        canDelete={canAdminister(role)}
         exports={exports.map((record) => ({
           exportId: record.exportId,
           docType: record.docType,

@@ -34,6 +34,7 @@ export type AuditAction =
   | "QUOTE_WITHDRAWN"
   | "QUOTE_COMMENTED"
   | "QUOTE_PURGED"
+  | "QUOTE_DELETED"
   | "PDF_EXPORTED"
   | "PDF_EXPORT_BLOCKED"
   | "TENANT_CREATED"

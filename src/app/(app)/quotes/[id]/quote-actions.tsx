@@ -5,7 +5,7 @@ import type { QuoteStatus } from "@prisma/client";
 import { downloadExport } from "@/lib/export-client";
 import { EXPORTABLE } from "@/lib/quotes";
 import { LocalTime } from "@/components/local-time";
-import { withdraw, type DecisionState } from "../../reviews/actions";
+import { deleteQuote, withdraw, type DecisionState } from "../../reviews/actions";
 
 interface ExportRow {
   exportId: string;
@@ -22,6 +22,7 @@ export function QuoteActions({
   clientName,
   canExport,
   canWithdraw,
+  canDelete,
   exports,
 }: {
   quoteId: string;
@@ -30,11 +31,14 @@ export function QuoteActions({
   clientName: string;
   canExport: boolean;
   canWithdraw: boolean;
+  canDelete: boolean;
   exports: ExportRow[];
 }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [state, withdrawAction, withdrawing] = useActionState<DecisionState, FormData>(withdraw, {});
+  const [deleteState, deleteAction, deleting] = useActionState<DecisionState, FormData>(deleteQuote, {});
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const approved = EXPORTABLE.includes(status) && canExport;
 
   async function runExport(docType: "QUOTE" | "COGS") {
@@ -65,9 +69,9 @@ export function QuoteActions({
           {error}
         </p>
       ) : null}
-      {state.error ? (
+      {state.error || deleteState.error ? (
         <p role="alert" className="mt-4 rounded-brand bg-orange/10 px-3 py-2 text-[13px] text-orange-dark">
-          {state.error}
+          {state.error ?? deleteState.error}
         </p>
       ) : null}
 
@@ -97,6 +101,30 @@ export function QuoteActions({
           </form>
         ) : null}
       </div>
+
+      {canDelete ? (
+        <div className="mt-6 border-t border-mist pt-4">
+          {confirmDelete ? (
+            <form action={deleteAction} className="flex flex-wrap items-center gap-3">
+              <input type="hidden" name="quoteId" value={quoteId} />
+              <p className="text-[13px] text-slate">
+                Permanently delete this quote? Its details are written to the audit log; export records
+                are kept.
+              </p>
+              <button type="submit" className="btn-primary" disabled={deleting}>
+                {deleting ? "Deleting…" : "Yes, delete quote"}
+              </button>
+              <button type="button" className="btn-ghost" disabled={deleting} onClick={() => setConfirmDelete(false)}>
+                Cancel
+              </button>
+            </form>
+          ) : (
+            <button type="button" className="btn-ghost text-orange-dark" onClick={() => setConfirmDelete(true)}>
+              Delete quote
+            </button>
+          )}
+        </div>
+      ) : null}
 
       {exports.length ? (
         <div className="mt-6 border-t border-mist pt-4">
