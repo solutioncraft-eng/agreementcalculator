@@ -8,7 +8,7 @@ order: 50
 
 | Document | Audience | Contents |
 | --- | --- | --- |
-| **Agreement PDF** | The client | Offering name, per-user rate, monthly total for the environment, bundle applied, your branding and PDF footer, notes |
+| **Agreement PDF** | The client | Offering name, per-user rate, monthly total for the environment, bundle applied, what is included, your branding and PDF footer, notes; the customer's logo and contacts when picked from [MSP Cadence](/help/guide/mspcadence-integration) |
 | **Internal COGS PDF** | Your team only | Every COGS item and its cost for this environment, the labor or markup applied, floor, discount and the achieved gross margin |
 
 Both are generated on the server from the same inputs, so they always agree with each other.

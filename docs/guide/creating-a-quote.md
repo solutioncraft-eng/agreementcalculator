@@ -56,7 +56,7 @@ If the panel says **This configuration falls outside standard pricing**, it list
 
 Under **Client and output**:
 
-- **Client name** — printed on the PDF and used as the quote's name in Quotes and Reviews. Required.
+- **Client name** — printed on the PDF and used as the quote's name in Quotes and Reviews. Required. If the workspace is connected to MSP Cadence this field also searches your client roster — see [MSP Cadence integration](/help/guide/mspcadence-integration).
 - **Notes for the PDF / reviewer** — optional. On an exported agreement these appear on the document; on a submitted quote the reviewer reads them.
 
 Then either:
