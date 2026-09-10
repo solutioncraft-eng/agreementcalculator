@@ -510,6 +510,15 @@ export function CogsDocument({ result, tierKey, clientName, notes, stamp, worksp
               <Text>{money(t.headlineRate - t.discountedRate)}</Text>
             </View>
           ) : null}
+          {t.premiumTarget !== null ? (
+            <View style={styles.row}>
+              <Text style={styles.rowMuted}>
+                {t.premiumPct}% of the premium offering
+                {t.belowPremiumPct ? " — quoted under it, approved by leadership" : ""}
+              </Text>
+              <Text style={styles.rowMuted}>{money(t.premiumTarget)}</Text>
+            </View>
+          ) : null}
           <View style={styles.rowTotal}>
             <Text>Agreement rate</Text>
             <Text>

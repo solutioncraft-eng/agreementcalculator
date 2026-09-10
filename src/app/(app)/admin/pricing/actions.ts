@@ -83,6 +83,9 @@ export async function createDraft(_prev: AdminState, _formData: FormData): Promi
             parentKey: tier.parentKey,
             sortOrder: tier.sortOrder,
             coManaged: tier.coManaged,
+            premium: tier.premium,
+            premiumPct: tier.premiumPct,
+            minUsers: tier.minUsers,
             overridePerUser: tier.overridePerUser,
             overridePerDevice: tier.overridePerDevice,
             overridePerLocation: tier.overridePerLocation,
@@ -480,6 +483,48 @@ function hasParentCycle(links: Map<string, string | null>, key: string): boolean
   return false;
 }
 
+const PICK_PREMIUM =
+  "Mark one offering as the premium agreement — until then this co-managed offering is held to the per-user floor rather than a share of premium.";
+
+function premiumNote(label: string, lost: { label: string } | null): string {
+  return lost
+    ? `${label} is now the premium offering (${lost.label} no longer is).`
+    : `${label} is now the premium offering.`;
+}
+
+/**
+ * A co-managed offering carrying a share of premium needs a premium offering to
+ * take that share of.
+ */
+function needsPremium(
+  data: { premiumPct: number | null; premium: boolean },
+  tiers: { id: string; premium: boolean }[],
+  tierId: string | null,
+): boolean {
+  if (data.premiumPct === null || data.premium) return false;
+  return !tiers.some((tier) => tier.premium && tier.id !== tierId);
+}
+
+/**
+ * A version has one premium offering, so marking one clears the mark from the
+ * rest. Returns the offering that lost it, for the confirmation message.
+ */
+async function takePremium(
+  db: TenantDb,
+  versionId: string,
+  keptId: string,
+): Promise<{ label: string } | null> {
+  const previous = await db.serviceTier.findFirst({
+    where: { versionId, premium: true, NOT: { id: keptId } },
+  });
+  if (!previous) return null;
+  await db.serviceTier.updateMany({
+    where: { versionId, premium: true, NOT: { id: keptId } },
+    data: { premium: false },
+  });
+  return { label: previous.label };
+}
+
 /**
  * Adds or renames one of the draft's offerings, and sets the offering it builds
  * on. Keys are generated once and never rewritten, because COGS items and
@@ -501,6 +546,9 @@ export async function saveServiceTier(_prev: AdminState, formData: FormData): Pr
     description: formData.get("description") ?? undefined,
     parentKey: formData.get("parentKey") ?? undefined,
     coManaged: formData.get("coManaged") === "on",
+    premium: formData.get("premium") === "on",
+    premiumPct: formData.get("premiumPct") ?? undefined,
+    minUsers: formData.get("minUsers") ?? undefined,
     overridePerUser: formData.get("overridePerUser") ?? undefined,
     overridePerDevice: formData.get("overridePerDevice") ?? undefined,
     overridePerLocation: formData.get("overridePerLocation") ?? undefined,
@@ -510,9 +558,16 @@ export async function saveServiceTier(_prev: AdminState, formData: FormData): Pr
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the offering." };
   const data = parsed.data;
   const parentKey = data.parentKey || null;
-  // A zero component is the same as none, so the stored row reads cleanly.
+  if (data.premium && data.coManaged) {
+    return { error: "The premium offering is the one co-managed offerings are measured against, so it cannot itself be co-managed." };
+  }
+  // A zero component is the same as none, so the stored row reads cleanly. The
+  // premium offering is what shares are measured against, so it holds none.
   const pricing = {
     coManaged: data.coManaged,
+    premium: data.premium,
+    premiumPct: data.premium ? null : data.premiumPct,
+    minUsers: data.minUsers,
     overridePerUser: data.overridePerUser || null,
     overridePerDevice: data.overridePerDevice || null,
     overridePerLocation: data.overridePerLocation || null,
@@ -550,6 +605,7 @@ export async function saveServiceTier(_prev: AdminState, formData: FormData): Pr
       ? await setOwnItems(db, tenant.id, versionId, before.key, chosenItems)
       : null;
     if (change && "error" in change) return change;
+    const lostPremium = data.premium ? await takePremium(db, versionId, tierId) : null;
     await audit({
       action: "SERVICE_TIER_UPDATED",
       entity: "ServiceTier",
@@ -560,6 +616,9 @@ export async function saveServiceTier(_prev: AdminState, formData: FormData): Pr
         description: before.description,
         parentKey: before.parentKey,
         coManaged: before.coManaged,
+        premium: before.premium,
+        premiumPct: before.premiumPct,
+        minUsers: before.minUsers,
         overridePerUser: before.overridePerUser,
         overridePerDevice: before.overridePerDevice,
         overridePerLocation: before.overridePerLocation,
@@ -573,11 +632,17 @@ export async function saveServiceTier(_prev: AdminState, formData: FormData): Pr
     });
     revalidatePath(`/admin/pricing/${versionId}`);
     return {
-      ok: change
-        ? `Offering updated — ${data.label} carries ${change.after.length} item${
-            change.after.length === 1 ? "" : "s"
-          } of its own.`
-        : "Offering updated.",
+      ok: [
+        change
+          ? `Offering updated — ${data.label} carries ${change.after.length} item${
+              change.after.length === 1 ? "" : "s"
+            } of its own.`
+          : "Offering updated.",
+        data.premium ? premiumNote(data.label, lostPremium) : null,
+        needsPremium(data, tiers, tierId) ? PICK_PREMIUM : null,
+      ]
+        .filter(Boolean)
+        .join(" "),
     };
   }
 
@@ -586,7 +651,7 @@ export async function saveServiceTier(_prev: AdminState, formData: FormData): Pr
   const base = slugify(data.label) || "offering";
   const key = tiers.some((tier) => tier.key === base) ? `${base}-${tiers.length + 1}` : base;
 
-  await db.serviceTier.create({
+  const created = await db.serviceTier.create({
     data: {
       tenantId: tenant.id,
       versionId,
@@ -600,6 +665,7 @@ export async function saveServiceTier(_prev: AdminState, formData: FormData): Pr
   });
   const change = chosenItems ? await setOwnItems(db, tenant.id, versionId, key, chosenItems) : null;
   if (change && "error" in change) return change;
+  const lostPremium = data.premium ? await takePremium(db, versionId, created.id) : null;
   await audit({
     action: "SERVICE_TIER_CREATED",
     entity: "ServiceTier",
@@ -614,11 +680,17 @@ export async function saveServiceTier(_prev: AdminState, formData: FormData): Pr
 
   revalidatePath(`/admin/pricing/${versionId}`);
   return {
-    ok: change
-      ? `Added ${data.label} carrying ${change.after.length} item${
-          change.after.length === 1 ? "" : "s"
-        } of its own.`
-      : `Added ${data.label}.`,
+    ok: [
+      change
+        ? `Added ${data.label} carrying ${change.after.length} item${
+            change.after.length === 1 ? "" : "s"
+          } of its own.`
+        : `Added ${data.label}.`,
+      data.premium ? premiumNote(data.label, lostPremium) : null,
+      needsPremium(data, tiers, null) ? PICK_PREMIUM : null,
+    ]
+      .filter(Boolean)
+      .join(" "),
   };
 }
 
@@ -826,6 +898,13 @@ export async function publishVersion(_prev: AdminState, formData: FormData): Pro
 
   const tiers = await db.serviceTier.findMany({ where: { versionId } });
   if (tiers.length === 0) return { error: "Add at least one offering before publishing." };
+
+  const sharedOnPremium = tiers.find((tier) => tier.premiumPct !== null);
+  if (sharedOnPremium && !tiers.some((tier) => tier.premium)) {
+    return {
+      error: `"${sharedOnPremium.label}" is priced as a share of the premium offering — mark one offering as premium before publishing.`,
+    };
+  }
 
   const activeItems = await db.cogsItem.findMany({
     where: { versionId, active: true },

@@ -95,6 +95,7 @@ export async function POST(request: Request) {
       locations: quote.locations,
       sgmPct: quote.sgmPct.toNumber(),
       perUserFloor: quote.perUserFloor.toNumber(),
+      premiumPct: quote.premiumPct?.toNumber() ?? null,
       floorOverride: quote.floorOverride,
       addonMultiplier: quote.addonMultiplier.toNumber(),
       markupMultiple: quote.markupMultiple.toNumber(),
@@ -139,6 +140,16 @@ export async function POST(request: Request) {
   }
 
   const result = forTier(priced, payload.tierKey);
+
+  // A quote already approved keeps whatever it was approved at; a fresh export
+  // cannot go out for a client the offering does not sell to.
+  const requested = priced.tiers.find((tier) => tier.key === payload.tierKey);
+  if (!quoteId && requested && !requested.available) {
+    return NextResponse.json(
+      { error: `${requested.label} sells to ${requested.minUsers} users or more.` },
+      { status: 400 },
+    );
+  }
 
   // Non-standard pricing can only leave the building once leadership has signed off.
   if (!quoteId && result.needsApproval) {
@@ -232,6 +243,7 @@ export async function POST(request: Request) {
           locations: inputs.locations,
           sgmPct: inputs.sgmPct,
           perUserFloor: inputs.perUserFloor,
+          premiumPct: inputs.premiumPct,
           floorOverride: inputs.floorOverride,
           addonMultiplier: inputs.addonMultiplier,
           markupMultiple: inputs.markupMultiple,

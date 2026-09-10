@@ -25,9 +25,10 @@ export const SEED_COST_PLUS_SETTINGS = {
  * Offerings a new workspace starts with, named and costed generically so an
  * admin renames and re-costs them rather than inheriting someone else's stack:
  * a parent agreement, an add-on built on it, and a standalone co-managed
- * agreement that shares some tooling but carries its own membership. Together
- * they demonstrate both ways to compose an offering. Any of them can be
- * renamed, re-parented or removed while the version is still a draft.
+ * agreement that shares some tooling but carries its own membership, priced at
+ * the recommended 65% of the premium agreement. Together they demonstrate both
+ * ways to compose an offering. Any of them can be renamed, re-parented or
+ * removed while the version is still a draft.
  */
 export const SEED_SERVICE_TIERS = [
   {
@@ -43,6 +44,7 @@ export const SEED_SERVICE_TIERS = [
     description: "Parent Agreement plus the advanced security stack",
     parentKey: "parent",
     coManaged: false,
+    premium: true,
   },
   {
     key: "co-managed",
@@ -50,6 +52,7 @@ export const SEED_SERVICE_TIERS = [
     description: "Standalone: delivered alongside the client's own IT staff",
     parentKey: null,
     coManaged: true,
+    premiumPct: 65,
   },
 ] as const;
 

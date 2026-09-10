@@ -84,6 +84,9 @@ export async function QuoteDetail({ quote, db }: { quote: QuoteWithRelations; db
             </>
           )}
           <Stat label="Per-user floor" value={money(quote.perUserFloor.toNumber())} />
+          {quote.premiumPct ? (
+            <Stat label="Share of premium" value={`${quote.premiumPct.toNumber()}%`} />
+          ) : null}
           <Stat
             label="Pricing version"
             value={`${quote.pricingVersion.label} · ${quote.pricingVersion.costBasis}`}

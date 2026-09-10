@@ -179,6 +179,7 @@ export async function deleteQuote(_prev: DecisionState, formData: FormData): Pro
       locations: quote.locations,
       sgmPct: quote.sgmPct.toNumber(),
       perUserFloor: quote.perUserFloor.toNumber(),
+      premiumPct: quote.premiumPct?.toNumber() ?? null,
       floorOverride: quote.floorOverride,
       addonMultiplier: quote.addonMultiplier.toNumber(),
       markupMultiple: quote.markupMultiple.toNumber(),

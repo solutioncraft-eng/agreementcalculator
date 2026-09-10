@@ -14,6 +14,7 @@ const INPUTS: CalcInputs = {
   ...DEFAULT_INPUTS,
   sgmPct: SEED_COST_PLUS_SETTINGS.defaultSgmPct,
   perUserFloor: SEED_COST_PLUS_SETTINGS.minPerUserFloor,
+  premiumPct: null,
   floorOverride: false,
   addonMultiplier: SEED_COST_PLUS_SETTINGS.addonMultiplier,
   markupMultiple: 0,

@@ -54,6 +54,12 @@ interface TierView {
   description: string | null;
   parentKey: string | null;
   coManaged: boolean;
+  /** The offering co-managed offerings are measured against. One per version. */
+  premium: boolean;
+  /** Share of the premium offering this offering is expected to hold, percent. */
+  premiumPct: number | null;
+  /** Fewest users it sells to; null sells at any size. */
+  minUsers: number | null;
   override: TierOverrideView;
   /** Own per-user floor; null follows the version floor, 0 means none. */
   perUserFloor: number | null;
@@ -358,8 +364,11 @@ export function VersionEditor({
                     <p className="text-[13px] text-slate">{tier.description ?? "—"}</p>
                     <p className="font-display text-[11px] uppercase tracking-eyebrow text-slate">
                       {chainOf(tiers, tier.key)[0]?.coManaged ? "Co-managed" : "Fully managed"}
+                      {tier.premium ? " · premium agreement" : ""}
+                      {tier.premiumPct === null ? "" : ` · ${tier.premiumPct}% of premium`}
+                      {tier.minUsers === null ? "" : ` · ${tier.minUsers}+ users`}
                       {hasOverride(tier.override) ? ` · flat rate ${describeOverride(tier.override)}` : ""}
-              {tier.perUserFloor === null
+              {tier.premiumPct !== null || tier.perUserFloor === null
                 ? ""
                 : tier.perUserFloor === 0
                   ? " · no per-user floor"
@@ -833,6 +842,10 @@ function TierForm({
   const root = parentKey ? chainOf(tiers, parentKey)[0] : undefined;
   const rootLabel = root?.label ?? parentLabel;
   const rootCoManaged = root?.coManaged ?? false;
+  const [coManaged, setCoManaged] = useState(tier?.coManaged ?? false);
+  const [premium, setPremium] = useState(tier?.premium ?? false);
+  const sharesPremium = parentKey ? rootCoManaged : coManaged;
+  const premiumHolder = tiers.find((candidate) => candidate.premium && candidate.id !== tier?.id);
   // Items reached through the chosen parent chain arrive with it, so they are
   // shown as inherited rather than offered for ticking.
   const inheritedKeys = parentKey ? chainOf(tiers, parentKey).map((member) => member.key) : [];
@@ -897,22 +910,81 @@ function TierForm({
               priced with the add-on lever either way.
             </p>
           ) : (
-            <label className="mt-1 flex items-start gap-2 text-[13px] text-navy">
-              <input
-                type="checkbox"
-                name="coManaged"
-                defaultChecked={tier?.coManaged ?? false}
-                className="mt-[3px] h-4 w-4 accent-orange"
-              />
-              <span>
-                Co-managed — delivered alongside the client&apos;s own IT staff.
-                <span className="block text-slate">
-                  Its tools are priced with the version&apos;s co-managed lever instead of the main one, and so
-                  are the offerings that build on it.
+            <>
+              <label className="mt-1 flex items-start gap-2 text-[13px] text-navy">
+                <input
+                  type="checkbox"
+                  name="coManaged"
+                  checked={coManaged}
+                  onChange={(event) => {
+                    setCoManaged(event.target.checked);
+                    if (event.target.checked) setPremium(false);
+                  }}
+                  className="mt-[3px] h-4 w-4 accent-orange"
+                />
+                <span>
+                  Co-managed — delivered alongside the client&apos;s own IT staff.
+                  <span className="block text-slate">
+                    Its tools are priced with the version&apos;s co-managed lever instead of the main one, and so
+                    are the offerings that build on it.
+                  </span>
                 </span>
-              </span>
-            </label>
+              </label>
+              <label className="mt-2 flex items-start gap-2 text-[13px] text-navy">
+                <input
+                  type="checkbox"
+                  name="premium"
+                  checked={premium}
+                  disabled={coManaged}
+                  onChange={(event) => setPremium(event.target.checked)}
+                  className="mt-[3px] h-4 w-4 accent-orange disabled:opacity-60"
+                />
+                <span>
+                  The premium agreement — every co-managed offering is priced as a share of it.
+                  <span className="block text-slate">
+                    One per version.{" "}
+                    {coManaged
+                      ? "A co-managed offering cannot be the premium one it is measured against."
+                      : premiumHolder
+                        ? `Saving this takes it from ${premiumHolder.label}.`
+                        : "Nothing carries it yet."}
+                  </span>
+                </span>
+              </label>
+            </>
           )}
+          {sharesPremium ? (
+            <div className="mt-3 grid gap-3 sm:grid-cols-4">
+              <Field
+                name="premiumPct"
+                label="Share of premium (%)"
+                hint="What this co-managed offering is expected to sell for as a share of the premium agreement's rate before any bundle discount — 65% for a helpdesk level agreement, 53% for a higher-tier one, which is cheaper because it carries no frontline volume of labor. A quote that lands under the share is flagged for approval rather than lifted. Leave blank to hold the offering to the per-user floor instead."
+                type="number"
+                step="1"
+                defaultValue={tier?.premiumPct ?? ""}
+                placeholder="65"
+              />
+              <p className="self-end pb-2 text-[13px] text-slate sm:col-span-3">
+                {premiumHolder
+                  ? `A share of ${premiumHolder.label}. Recommended: 65% helpdesk, 53% higher-tier.`
+                  : "Mark one offering as the premium agreement above — a share has nothing to measure against until then."}
+              </p>
+            </div>
+          ) : null}
+          <div className="mt-3 grid gap-3 sm:grid-cols-4">
+            <Field
+              name="minUsers"
+              label="Fewest users"
+              hint="The smallest client this offering sells to. A quote under it cannot select the offering at all — a co-managed agreement only works at the seat count that funds the client's own IT staff. Leave blank to sell at any size."
+              type="number"
+              step="1"
+              defaultValue={tier?.minUsers ?? ""}
+              placeholder="Any size"
+            />
+            <p className="self-end pb-2 text-[13px] text-slate sm:col-span-3">
+              Blank sells at any size. Offerings that build on {name} inherit the minimum.
+            </p>
+          </div>
           <p className="mt-3 text-[13px] text-slate">
             Optional flat rate. Leave blank to price from cost; fill in any of these and {name} sells for
             their sum instead of the formula. The COGS cost floor still applies, and a rate under it is
