@@ -1,17 +1,11 @@
 import Link from "next/link";
 import { requireTenant } from "@/lib/auth";
-import { foundryConfigured } from "@/lib/foundry";
-import { SupportForm } from "./support-form";
+import { SupportForms } from "./support-form";
 
 export const dynamic = "force-dynamic";
 
-export default async function SupportPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ page?: string }>;
-}) {
+export default async function SupportPage() {
   const { user } = await requireTenant();
-  const { page } = await searchParams;
 
   return (
     <div className="space-y-6">
@@ -28,18 +22,7 @@ export default async function SupportPage({
         </p>
       </header>
 
-      {foundryConfigured() ? (
-        <SupportForm requester={`${user.name} <${user.email}>`} initialPage={page ?? ""} />
-      ) : (
-        <section className="card">
-          <p className="text-[15px] text-ink">
-            Support requests are not switched on for this deployment yet. An operator needs to set a Foundry intake credential ({" "}
-            <code className="font-mono text-[13px]">FOUNDRY_CLIENT_ID</code> and{" "}
-            <code className="font-mono text-[13px]">FOUNDRY_SIGNING_SECRET</code>); until then, contact
-            SolutionCraft directly.
-          </p>
-        </section>
-      )}
+      <SupportForms fullName={user.name} email={user.email} />
     </div>
   );
 }
