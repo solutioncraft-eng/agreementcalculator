@@ -103,6 +103,7 @@ export default async function SuperPage() {
       name: tenant.name,
       slug: tenant.slug,
       status: tenant.status,
+      reason: access.reason,
       billing: access.deadline
         ? `${describeAccess(access)} · ${formatUtc(access.deadline)}`
         : describeAccess(access),

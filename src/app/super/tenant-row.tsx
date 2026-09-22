@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import clsx from "clsx";
 import type { TenantStatus } from "@prisma/client";
+import type { AccessReason } from "@/lib/billing";
 import { setPricingModel, setTenantStatus, type SuperState } from "./actions";
 import { BillingControls } from "./billing-controls";
 import { DeleteTenant } from "./delete-tenant";
@@ -12,6 +13,7 @@ export interface Row {
   name: string;
   slug: string;
   status: TenantStatus;
+  reason: AccessReason;
   /** What the tenant is running on: trial, subscription, or comp. */
   billing: string;
   /** Why it is comped, when it is. */
@@ -33,11 +35,16 @@ export interface PricingModelOption {
   label: string;
 }
 
-const STATUS_CLASS: Record<TenantStatus, string> = {
-  TRIAL: "bg-orange-tint/25 text-orange-dark",
-  ACTIVE: "bg-navy text-white",
-  SUSPENDED: "bg-ink text-white",
-  COMPLIMENTARY: "bg-mist text-navy",
+const BADGE: Record<AccessReason, { label: string; className: string }> = {
+  COMPLIMENTARY: { label: "COMPLIMENTARY", className: "bg-mist text-navy" },
+  SUBSCRIBED: { label: "SUBSCRIBED", className: "bg-navy text-white" },
+  IN_GRACE: { label: "PAYMENT FAILED", className: "bg-orange-tint/25 text-orange-dark" },
+  ACTIVATED: { label: "ACTIVE", className: "bg-navy text-white" },
+  TRIAL: { label: "TRIAL", className: "bg-orange-tint/25 text-orange-dark" },
+  TRIAL_EXPIRED: { label: "TRIAL ENDED", className: "bg-ink text-white" },
+  PAYMENT_FAILED: { label: "LAPSED", className: "bg-ink text-white" },
+  SUBSCRIPTION_ENDED: { label: "LAPSED", className: "bg-ink text-white" },
+  COMPLIMENTARY_ENDED: { label: "LAPSED", className: "bg-ink text-white" },
 };
 
 export function TenantRow({ tenant, models }: { tenant: Row; models: PricingModelOption[] }) {
@@ -47,6 +54,7 @@ export function TenantRow({ tenant, models }: { tenant: Row; models: PricingMode
     {},
   );
   const suspended = tenant.status === "SUSPENDED";
+  const badge = suspended ? { label: "SUSPENDED", className: "bg-ink text-white" } : BADGE[tenant.reason];
 
   return (
     <div className="card space-y-3">
@@ -54,7 +62,7 @@ export function TenantRow({ tenant, models }: { tenant: Row; models: PricingMode
         <div>
           <div className="flex items-center gap-3">
             <h2 className="text-[20px] leading-6">{tenant.name}</h2>
-            <span className={clsx("tag", STATUS_CLASS[tenant.status])}>{tenant.status}</span>
+            <span className={clsx("tag", badge.className)}>{badge.label}</span>
           </div>
           <p className="mt-1 font-mono text-[12px] text-slate">
             {tenant.slug} · {tenant.pricingModelLabel} · created {tenant.createdAt}
@@ -87,7 +95,7 @@ export function TenantRow({ tenant, models }: { tenant: Row; models: PricingMode
               Change model
             </button>
           </form>
-          {tenant.status === "TRIAL" ? (
+          {tenant.status === "TRIAL" && (tenant.reason === "TRIAL" || tenant.reason === "TRIAL_EXPIRED") ? (
             <form action={action}>
               <input type="hidden" name="tenantId" value={tenant.id} />
               <input type="hidden" name="status" value="ACTIVE" />
