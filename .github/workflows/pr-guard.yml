@@ -1,10 +1,116 @@
-# PLACEHOLDER — PR Guard workflow (final contents to be supplied)
-name: pr-guard
+# .github/workflows/pr-guard.yml  (AgreementCalculator version)
+#
+# Runs on every PR to main. Two jobs:
+#   guard      - typechecks, tests and builds the PR with a READ-ONLY token (bun, same as ci.yml),
+#                then classifies the diff. Make "guard" a required status check in the ruleset.
+#   automerge  - never runs PR code. For Claude PRs (branch claude/*) inside the safe envelope it
+#                enables GitHub auto-merge (squash). Otherwise it labels the PR needs-review and
+#                comments why, and Wil merges by hand in Foundry.
+#
+# AgreementCalculator: Next.js + Prisma on Vercel. A merge to main IS a production deploy, and the
+# Vercel build (vercel-build) runs Prisma migrations against the production database. So prisma/,
+# scripts/, auth, Stripe, API routes and config are protected, and CI never runs migrations or seeds.
+
+name: PR Guard
+
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: pr-guard-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  MAX_FILES: "8"
+  MAX_LINES: "400"
+  # Any match holds the PR for a human merge: Prisma schema/migrations, scripts, deps, config,
+  # API routes, auth/session, admin, Stripe/billing.
+  PROTECTED_PATHS_REGEX: '^(\.github/|\.env|prisma/|scripts/|vercel\.json|next\.config\.|middleware\.|package\.json|package-lock\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|(.*/)?api/|.*(auth|Auth|login|Login|session|Session|jwt|password|Password|admin|Admin|stripe|Stripe|billing|Billing|checkout|Checkout|webhook|Webhook|subscription|Subscription).*)'
+
 jobs:
   guard:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    outputs:
+      hold: ${{ steps.scope.outputs.hold }}
+      reasons: ${{ steps.scope.outputs.reasons }}
+      files: ${{ steps.scope.outputs.files }}
+      lines: ${{ steps.scope.outputs.lines }}
     steps:
-      - run: echo "Replace this placeholder with the real PR Guard workflow."
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install, typecheck, test, build (no database, no migrations)
+        env:
+          # Dummy values so Prisma and Next.js can build. Never point CI at a real database.
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+          DIRECT_URL: postgresql://ci:ci@localhost:5432/ci
+          NEXT_TELEMETRY_DISABLED: "1"
+        run: |
+          if   [ -f package-lock.json ]; then npm ci
+          elif [ -f pnpm-lock.yaml ];    then corepack enable && pnpm install --frozen-lockfile
+          elif [ -f yarn.lock ];         then corepack enable && yarn install --frozen-lockfile
+          elif ls bun.lock* >/dev/null 2>&1; then npm i -g bun && bun install --frozen-lockfile
+          else npm install; fi
+          npx prisma generate
+          npm run typecheck
+          if ls tests/*.test.ts >/dev/null 2>&1; then npm test; else echo "No tests found - skipping"; fi
+          npx next build
+
+      - name: Classify the diff
+        id: scope
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          FILES=$(git diff --name-only "$BASE...$HEAD")
+          NFILES=$(echo "$FILES" | grep -c . || true)
+          NLINES=$(git diff --numstat "$BASE...$HEAD" | awk '{a+=$1+$2} END {print a+0}')
+          HITS=$(echo "$FILES" | grep -E "$PROTECTED_PATHS_REGEX" || true)
+          REASONS=""
+          if [ -n "$HITS" ]; then REASONS="$REASONS- touches protected paths: $(echo $HITS | tr ' ' ',')\n"; fi
+          if [ "$NFILES" -eq 0 ]; then REASONS="$REASONS- no changes vs main\n"; fi
+          if [ "$NFILES" -gt "$MAX_FILES" ]; then REASONS="$REASONS- $NFILES files changed (limit $MAX_FILES)\n"; fi
+          if [ "$NLINES" -gt "$MAX_LINES" ]; then REASONS="$REASONS- $NLINES lines changed (limit $MAX_LINES)\n"; fi
+          if [ -n "$REASONS" ]; then HOLD=true; else HOLD=false; fi
+          {
+            echo "reasons<<EOF"; printf "%b" "$REASONS"; echo "EOF"
+            echo "hold=$HOLD"; echo "files=$NFILES"; echo "lines=$NLINES"
+          } >> "$GITHUB_OUTPUT"
+
+  automerge:
+    needs: guard
+    # Only Claude's Foundry branches are ever auto-merged. Human PRs just get the guard check.
+    if: startsWith(github.event.pull_request.head.ref, 'claude/') && github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      PR: ${{ github.event.pull_request.number }}
+    steps:
+      - name: Hold for review
+        if: needs.guard.outputs.hold == 'true'
+        env:
+          REASONS: ${{ needs.guard.outputs.reasons }}
+        run: |
+          gh pr merge "$PR" --disable-auto 2>/dev/null || true
+          gh pr edit "$PR" --add-label needs-review
+          gh pr comment "$PR" --body "$(printf 'PR Guard: **held for your review** (not auto-merged):\n%s\nTypecheck, tests and build passed. Review it and click Merge in Foundry if it looks right. Merging deploys to production on Vercel (including any Prisma migration).' "$REASONS")"
+
+      - name: Enable auto-merge
+        if: needs.guard.outputs.hold == 'false'
+        run: |
+          gh pr merge "$PR" --auto --squash --delete-branch
+          gh pr comment "$PR" --body "PR Guard: checks passed and the diff is inside the safe envelope (${{ needs.guard.outputs.files }} files, ${{ needs.guard.outputs.lines }} lines). Auto-merge is on; it merges when the remaining required checks pass, and Vercel then deploys it to production. Roll back with Vercel Instant Rollback if needed."
