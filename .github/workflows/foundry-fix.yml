@@ -1,0 +1,11 @@
+# PLACEHOLDER — Foundry fix workflow (final contents to be supplied)
+name: foundry-fix
+on:
+  issues:
+    types: [opened, labeled]
+jobs:
+  placeholder:
+    if: contains(github.event.issue.labels.*.name, 'foundry-fix')
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Replace this placeholder with the real Claude Code workflow."
