@@ -1,0 +1,10 @@
+# PLACEHOLDER — PR Guard workflow (final contents to be supplied)
+name: pr-guard
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Replace this placeholder with the real PR Guard workflow."
